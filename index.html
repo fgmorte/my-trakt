@@ -15,7 +15,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",
 h1{font:700 22px Georgia,serif;margin:0;padding:16px}
 main{max-width:640px;margin:0 auto}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;background:none;color:var(--mu);padding:14px 4px;font:inherit;font-size:13px}
+nav button{flex:1;border:0;background:none;color:var(--mu);padding:14px 2px;font:inherit;font-size:12px}
 nav button.on{color:var(--ac);font-weight:700;box-shadow:inset 0 3px var(--ac)}
 .it{display:flex;gap:12px;padding:10px 16px;border-bottom:1px solid var(--ln)}
 .it img,.ph{width:62px;height:93px;border-radius:4px;object-fit:cover;background:var(--ln);flex:none}
@@ -41,7 +41,7 @@ a{color:var(--ac)}
 const $=s=>document.querySelector(s);
 const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
-let cfg=Object.assign({cid:DEFAULT_CID},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'hist':'cfg';
+let cfg=Object.assign({cid:DEFAULT_CID},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
 if(!cfg.cid)cfg.cid=DEFAULT_CID;
 const posters=ls.get('posters')||{};
 const API='https://api.trakt.tv';
@@ -81,11 +81,11 @@ const fmt=d=>d?new Date(d).toLocaleDateString('es',{day:'numeric',month:'short',
 function card(n,btns,idx){
   const o=n.o,sub=n.kind==='episode'?`T${n.ep.season}·E${n.ep.number} ${n.ep.title||''}`:(n.kind==='movie'?'Película':'Serie');
   const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${fmt(n.date)}</div>${bt}</div></div>`;
+  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${n.extra||fmt(n.date)}</div>${bt}</div></div>`;
 }
 let items=[];
-async function render(list,btnsFor,empty){
-  items=list.map(norm).filter(Boolean);
+async function render(list,btnsFor,empty,pre){
+  items=pre||list.map(norm).filter(Boolean);
   $('#v').innerHTML=items.length?items.map((n,i)=>card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
   document.querySelectorAll('[data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
@@ -93,7 +93,20 @@ async function render(list,btnsFor,empty){
   });
 }
 const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
+let progData=[];
+const progPath=id=>`/shows/${id}/progress/watched`;
+function drawProg(){
+  const its=progData.map(r=>({kind:'episode',o:r.show,ep:r.p.next_episode,date:null,extra:`Llevas ${r.p.completed} de ${r.p.aired} episodios emitidos`}));
+  return render(null,()=>[WATCH],'Estás al día con todas tus series.',its);
+}
 const views={
+  async prog(){
+    const w=await tr('/sync/watched/shows?extended=noseasons');
+    w.sort((a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||''));
+    const res=await Promise.all(w.slice(0,25).map(x=>tr(progPath(x.show.ids.trakt)).then(p=>({show:x.show,p})).catch(()=>null)));
+    progData=res.filter(r=>r&&r.p.next_episode);
+    await drawProg();
+  },
   async hist(){
     const d=await tr('/sync/history?limit=40');
     await render(d,n=>[],'Aún no has marcado nada como visto.');
@@ -142,6 +155,10 @@ document.addEventListener('click',async e=>{
       await tr('/sync/history',{body:n.kind==='episode'?{episodes:[ids]}:{movies:[ids]}});
       toast('Marcado como visto');
       if(tab==='wl'||tab==='cal')go(tab);
+      else if(tab==='prog'){
+        const r=progData.find(r=>r.show.ids.trakt===n.o.ids.trakt);
+        try{r.p=await tr(progPath(n.o.ids.trakt));progData=progData.filter(r=>r.p.next_episode);drawProg()}catch(e){go('prog')}
+      }
     }else{
       await tr('/sync/watchlist',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});
       toast('Añadido a pendientes');
@@ -177,14 +194,14 @@ async function connect(){
     while(Date.now()<end){
       await new Promise(r=>setTimeout(r,d.interval*1000));
       const p=await fetch(API+'/oauth/device/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:d.device_code,client_id:cfg.cid,code_verifier:ver})});
-      if(p.status===200){tok=await p.json();ls.set('tok',tok);toast('Conectado');setNav();return go('hist')}
+      if(p.status===200){tok=await p.json();ls.set('tok',tok);toast('Conectado');setNav();return go('prog')}
       if(p.status!==400&&p.status!==429)throw new Error('Conexión rechazada ('+p.status+')');
     }
     throw new Error('El código ha caducado. Inténtalo de nuevo.');
   }catch(err){$('#dv').innerHTML=`<p class="s">${esc(err.message)}</p>`}
 }
 
-const TABS=[['hist','Visto'],['wl','Pendientes'],['cal','Próximos'],['disc','Descubrir'],['cfg','Ajustes']];
+const TABS=[['prog','Siguiente'],['hist','Visto'],['wl','Pendientes'],['cal','Próximos'],['disc','Descubrir'],['cfg','Ajustes']];
 function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}">${t[1]}</button>`).join('')}
 $('#nav').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)go(t)});
 async function go(t){
