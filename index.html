@@ -43,6 +43,14 @@ a{color:var(--tx);text-decoration:underline var(--ac)}
 [data-o]{cursor:pointer}
 details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
 .ok{color:var(--ac);font-weight:700;padding:0 6px}
+.b.pl{padding:4px 10px;font-size:12px;margin-top:6px}
+[hidden]{display:none!important}
+input[type=checkbox]{width:auto;margin:0 10px 0 0}
+.chkrow{display:flex;align-items:center;padding:6px 0;color:var(--tx);font-size:15px}
+.pp{display:flex;gap:10px;align-items:center;padding:6px 0}
+.pp img,.pp .av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--card);flex:none}
+.pp div{flex:1;min-width:0}.pp b{display:block}.pp span{color:var(--mu);font-size:13px}
+.kv{padding:8px 0;border-bottom:1px solid var(--ln)}.kv span{display:block;color:var(--mu);font-size:12px}
 .seg{display:flex;background:var(--card);border-radius:99px;padding:3px;margin-bottom:10px}
 .seg button{flex:1;border:0;background:none;color:var(--mu);padding:8px;border-radius:99px;font:inherit;font-weight:700}
 .seg button.on{background:var(--ac);color:var(--on)}
@@ -106,7 +114,7 @@ function card(n,btns,idx){
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
   const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${(cfg.subs||[]).length&&o.ids.tmdb?`<div class="plat" data-pl="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb}:${idx}"></div>`:''}${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 let items=[];
 async function render(list,btnsFor,empty,pre){
@@ -168,13 +176,75 @@ async function searchList(q){
   }catch(err){toast(err.message);S.found=[]}
   paintList();
 }
-const PLAT={8:'https://www.netflix.com/search?q=',119:'https://www.primevideo.com/search?phrase=',9:'https://www.primevideo.com/search?phrase=',337:'https://www.disneyplus.com/search?q=',1899:'https://play.max.com/search?q=',384:'https://play.max.com/search?q=',350:'https://tv.apple.com/search?term=',63:'https://www.filmin.es/buscar?q=',283:'https://www.crunchyroll.com/search?q='};
+const PLATS={8:{n:'Netflix',d:['netflix.com']},119:{n:'Prime Video',d:['primevideo.com','amazon.com','amazon.es']},337:{n:'Disney+',d:['disneyplus.com']},1899:{n:'Max',d:['max.com','hbomax.com']},350:{n:'Apple TV+',d:['tv.apple.com']},149:{n:'Movistar Plus+',d:['movistarplus.es']},1773:{n:'SkyShowtime',d:['skyshowtime.com']},63:{n:'Filmin',d:['filmin.es']},283:{n:'Crunchyroll',d:['crunchyroll.com']}};
+const ALIAS={9:119,384:1899};
 async function providers(kind,tmdb){
   if(!cfg.tmdb||!tmdb)return null;
   try{
     const r=await fetch(`https://api.themoviedb.org/3/${kind}/${tmdb}/watch/providers?api_key=${encodeURIComponent(cfg.tmdb)}`);
     const d=await r.json();return (d.results&&d.results[cfg.country])||null;
-  }catch(e){return null}
+  }catch(e){return undefined}
+}
+const PV=ls.get('prov')||{};
+async function provIds(kind,tmdb){
+  if(!cfg.tmdb||!tmdb)return [];
+  const k=`${kind}:${tmdb}:${cfg.country}`,c=PV[k];
+  if(c&&Date.now()-c.t<2592e5)return c.ids;
+  const r=await providers(kind,tmdb);
+  if(r===undefined)return [];
+  const ids=((r&&r.flatrate)||[]).map(x=>ALIAS[x.provider_id]||x.provider_id).filter(i=>PLATS[i]);
+  PV[k]={t:Date.now(),ids};ls.set('prov',PV);return ids;
+}
+async function fillPlat(el){
+  const [kind,tmdb,idx]=el.dataset.pl.split(':'),subs=cfg.subs||[];
+  if(!subs.length||!tmdb)return;
+  const ids=(await provIds(kind,tmdb).catch(()=>[])).filter(i=>subs.includes(i));
+  el.innerHTML=ids.map(i=>`<button class="b pl" data-pf="${i}" data-pi="${idx}">▶ ${PLATS[i].n}</button>`).join('');
+}
+const io='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);fillPlat(e.target)}}),{rootMargin:'200px'}):null;
+function observePlat(){document.querySelectorAll('[data-pl]:not([data-ob])').forEach(el=>{el.dataset.ob=1;io?io.observe(el):fillPlat(el)})}
+function okLink(u,pid){try{const x=new URL(u);return x.protocol==='https:'&&PLATS[pid].d.some(d=>x.hostname===d||x.hostname.endsWith('.'+d))}catch(e){return false}}
+function askLink(n,pid){
+  const k=(n.kind==='movie'?'m':'s')+n.o.ids.trakt+':'+pid,L=ls.get('lk')||{};
+  const v=prompt(`Pega el enlace de «${n.o.title}» en ${PLATS[pid].n} (en su app: Compartir → Copiar enlace). Se guarda solo en este dispositivo. Déjalo vacío para borrarlo.`,L[k]||'');
+  if(v===null)return null;
+  const t=v.trim();
+  if(!t){delete L[k];ls.set('lk',L);return ''}
+  if(!okLink(t,pid)){alert('El enlace no parece de '+PLATS[pid].n+'.');return null}
+  L[k]=t;ls.set('lk',L);return t;
+}
+async function tmdbInfo(kind,id){
+  if(!cfg.tmdb||!id)return null;
+  try{const r=await fetch(`https://api.themoviedb.org/3/${kind}/${id}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${encodeURIComponent(navigator.language||'es-ES')}&append_to_response=credits`);return r.ok?await r.json():null}catch(e){return null}
+}
+const JOBES={Director:'Dirección',Writer:'Guion',Screenplay:'Guion','Executive Producer':'Productor/a ejecutivo/a',Producer:'Producción','Original Music Composer':'Música','Director of Photography':'Fotografía'};
+function tabsHtml(tm,isM){
+  if(!tm)return '';
+  const person=(nm,sub,pp)=>`<div class="pp">${pp?`<img src="https://image.tmdb.org/t/p/w92${pp}" alt="" loading="lazy">`:'<div class="av"></div>'}<div><b>${esc(nm)}</b><span>${esc(sub||'')}</span></div></div>`;
+  const cr=tm.credits||{},cast=(cr.cast||[]).slice(0,24).map(c=>person(c.name,c.character,c.profile_path)).join('');
+  const seen=new Set(),eq=[];
+  (tm.created_by||[]).forEach(c=>eq.push(person(c.name,'Creación',c.profile_path)));
+  (cr.crew||[]).filter(c=>JOBES[c.job]).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path))}});
+  const rows=[],li=(t,v)=>{if(v)rows.push(`<div class="kv"><span>${t}</span>${v}</div>`)};
+  const names=a=>(a||[]).map(x=>esc(x.name)).join(', ');
+  li('Productoras',names(tm.production_companies));li('Cadenas',names(tm.networks));
+  li('Países',names(tm.production_countries)||esc((tm.origin_country||[]).join(', ')));
+  li('Idioma original',esc(tm.original_language||''));li('Estado',esc(tm.status||''));
+  if(isM){li('Estreno',fmt(tm.release_date));li('Presupuesto',tm.budget?'$'+tm.budget.toLocaleString('es'):'');li('Recaudación',tm.revenue?'$'+tm.revenue.toLocaleString('es'):'')}
+  else{li('Primera emisión',fmt(tm.first_air_date));li('Última emisión',fmt(tm.last_air_date));li('Temporadas',tm.number_of_seasons);li('Episodios',tm.number_of_episodes)}
+  if(/^https:\/\//.test(tm.homepage||''))li('Web oficial',`<a href="${esc(tm.homepage)}" target="_blank" rel="noopener noreferrer">${esc(tm.homepage)}</a>`);
+  const E=t=>`<div class="msg">${t}</div>`;
+  return `<div class="box"><div class="seg"><button data-tb="0" class="on">Reparto</button><button data-tb="1">Equipo</button><button data-tb="2">Producción</button></div>
+  <div data-pane="0">${cast||E('Sin datos de reparto.')}</div><div data-pane="1" hidden>${eq.join('')||E('Sin datos del equipo.')}</div><div data-pane="2" hidden>${rows.join('')||E('Sin datos de producción.')}</div></div>`;
+}
+function calCard(g,i){
+  const o=g.o,now=new Date(),f=g.eps[0],pad=x=>String(x).padStart(2,'0');
+  const rows=g.eps.map(n=>{
+    const t=new Date(n.date),aired=t<=now;
+    return `<div class="it" style="padding:8px 0"><div><span class="t">T${pad(n.ep.season)} | E${pad(n.ep.number)}</span> ${esc(n.ep.title||'')}<div class="s">${aired?'Emitido el ':'Se emite el '}${fmt(n.date)}${aired?'':' · '+t.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}</div></div>${aired?`<button class="chk" data-e="${n.ep.ids.trakt}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  }).join('');
+  const st=new Date(f.date)<=now?'Ya emitido':'Próximo: '+fmt(f.date);
+  return `<div class="it"><div class="ph" data-o="${i}" data-p="tv:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${i}">${esc(o.title)}</div><div class="sub">${g.eps.length} ${g.eps.length===1?'episodio':'episodios'} · ${st}</div>${(cfg.subs||[]).length&&o.ids.tmdb?`<div class="plat" data-pl="tv:${o.ids.tmdb}:${i}"></div>`:''}<details style="border:0;padding:0"><summary>Ver episodios</summary>${rows}</details></div></div>`;
 }
 let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
@@ -218,17 +288,22 @@ const views={
   },
   async cal(){
     const d0=new Date().toISOString().slice(0,10);
-    const d=await tr(`/calendars/my/shows/${d0}/14`);
-    const now=new Date(),its=d.map(norm).filter(Boolean).map(n=>{
-      const t=new Date(n.date);n.aired=t<=now;
-      n.extra=(n.aired?'Emitido el ':'Se emite el ')+fmt(n.date)+(n.aired?'':' · '+t.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}));
-      return n;
+    const d=await tr(`/calendars/my/shows/${d0}/30`);
+    const g={},out=[];
+    d.map(norm).filter(Boolean).forEach(n=>{
+      const k=n.o.ids.trakt;
+      if(!g[k]){g[k]={kind:'group',o:n.o,eps:[],date:n.date};out.push(g[k])}
+      g[k].eps.push(n);
     });
-    await render(null,n=>n.aired?[WATCH]:[],'No hay episodios de tus series en los próximos 14 días.',its);
+    out.forEach(x=>x.eps.sort((a,b)=>new Date(a.date)-new Date(b.date)));
+    out.sort((a,b)=>new Date(a.eps[0].date)-new Date(b.eps[0].date));
+    items=out;
+    $('#v').innerHTML=out.length?out.map((x,i)=>calCard(x,i)).join(''):'<div class="msg">No hay episodios de tus series en los próximos 30 días.</div>';
+    loadPosters();
   },
   async disc(){
     await loadWL().catch(()=>{});
-    $('#v').innerHTML=`<div class="box"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#v').innerHTML=`<div class="box"><div class="seg"><button data-ds="t" class="on">Tendencias</button><button data-ds="n">Estrenos del mes</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter')search(e.target.value)});
     await trending();
   }
@@ -238,14 +313,21 @@ async function trending(){
   const box=document.createElement('div');
   await renderInto([...m,...s],'Tendencias');
 }
+async function premieres(){
+  const d0=new Date().toISOString().slice(0,10);
+  const [a,b]=await Promise.all([tr(`/calendars/all/shows/new/${d0}/30`),tr(`/calendars/all/movies/${d0}/30`)]);
+  const all=[...a.map(x=>({kind:'show',o:x.show,date:x.first_aired,extra:'Estreno: '+fmt(x.first_aired)})),...b.map(x=>({kind:'movie',o:x.movie,date:x.released,extra:'Estreno: '+fmt(x.released)}))]
+    .filter(x=>x.o&&x.o.ids).sort((x,y)=>String(x.date).localeCompare(String(y.date))).slice(0,80);
+  await renderInto(null,'No hay estrenos en los próximos 30 días.',all);
+}
 async function search(q){
   q=q.trim();if(!q)return;
   const d=await tr(`/search/movie,show?query=${encodeURIComponent(q)}&limit=15`);
   await renderInto(d,'Sin resultados.');
 }
-async function renderInto(list,label){
-  items=list.map(norm).filter(Boolean);
-  const html=items.map((n,i)=>card(n,n.kind==='movie'?[WATCH,FOLLOW(n)]:[FOLLOW(n)],i)).join('');
+async function renderInto(list,label,pre){
+  items=pre||list.map(norm).filter(Boolean);
+  const html=items.map((n,i)=>card(n,[FOLLOW(n)],i)).join('');
   $('#r').innerHTML=items.length?html:`<div class="msg">${label}</div>`;
   document.querySelectorAll('#r [data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
@@ -261,48 +343,67 @@ function loadPosters(){
   });
 }
 async function openDetail(n){
-  const o=n.o,isM=n.kind==='movie',base=(isM?'/movies/':'/shows/')+o.ids.trakt;
+  const o=n.o,isM=n.kind==='movie',base=(isM?'/movies/':'/shows/')+o.ids.trakt,kd=isM?'movie':'tv';
   $('#h').textContent=o.title;
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
   try{
-    const [d,tx,pr,se,pv]=await Promise.all([
+    const [d,tx,pr,se,tm,pids]=await Promise.all([
       tr(base+'?extended=full'),
       tr(base+'/translations/es').catch(()=>[]),
       isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
       isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[]),
-      providers(isM?'movie':'tv',o.ids.tmdb),
+      tmdbInfo(kd,o.ids.tmdb),
+      provIds(kd,o.ids.tmdb).catch(()=>[]),
       loadWL().catch(()=>{})
     ]);
     const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
     const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.status,d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
-    const fl=(pv&&pv.flatrate)||[];
-    const purl=q=>(PLAT[q.provider_id]?PLAT[q.provider_id]+encodeURIComponent(d.title):(pv&&pv.link)||'#');
-    const pbtn=fl.map(q=>`<a class="b f" href="${purl(q)}" target="_blank" rel="noopener">▶ Ver en ${esc(q.provider_name)}</a>`).join('')||(pv&&pv.link?`<a class="b" href="${pv.link}" target="_blank" rel="noopener">Dónde verla</a>`:'');
-    const first=fl[0]?purl(fl[0]):'';
+    const subs=cfg.subs||[],mine=(pids||[]).filter(i=>subs.includes(i)),first=mine[0];
+    const plb=mine.length?mine.map(i=>`<button class="b f" data-pf="${i}" data-pi="D">▶ ${PLATS[i].n}</button><button class="b" data-pe="${i}" title="Cambiar enlace">✎</button>`).join(''):`<div class="s">${subs.length?'No aparece en tus plataformas ('+esc(cfg.country)+').':'Elige tus plataformas en Ajustes para verlas aquí.'}</div>`;
     const fol=(isM?WL.m:WL.s).has(o.ids.trakt);
     const done={};
     if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
     const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
       const eps=(s.episodes||[]).map(x=>{
         const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date();
-        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${!fut&&first?`<a class="b" href="${first}" target="_blank" rel="noopener" title="Abrir en la plataforma">▶</a>`:''}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
+        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${!fut&&first?`<button class="b" data-pf="${first}" data-pi="D" title="Abrir en ${PLATS[first].n}">▶</button>`:''}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
       }).join('');
       const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
       return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="ph" data-p="${isM?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
+    <div class="it"><div class="ph" data-p="${kd}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
     ${isM?`<button class="b f" data-d="seen">Visto</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div>
-    ${pbtn?`<div class="box" style="padding-bottom:0">${pbtn}<div class="s" style="margin-top:10px">Abre la app de la plataforma buscando este título. Para enviarlo al Chromecast, usa el icono de Cast dentro de esa app.</div></div>`:''}
-    <div class="box"><p>${esc(ov)}</p></div>${seasons}`;
+    <div class="box" style="padding-bottom:0">${plb}</div>
+    <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>go(tab);
-    window._d={isM,id:o.ids.trakt};
+    window._d={isM,id:o.ids.trakt,n};
     loadPosters();
   }catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
 }
 document.addEventListener('click',async e=>{
   const sg=e.target.closest('[data-sg]');
   if(sg){const S=cur();S.seg=sg.dataset.sg;S.found=[];return paintList()}
+  const pf=e.target.closest('[data-pf]');
+  if(pf){
+    const n=pf.dataset.pi==='D'?window._d.n:items[+pf.dataset.pi],pid=+pf.dataset.pf;
+    let u=(ls.get('lk')||{})[(n.kind==='movie'?'m':'s')+n.o.ids.trakt+':'+pid];
+    if(!u)u=askLink(n,pid);
+    if(u)window.open(u,'_blank','noopener');
+    return;
+  }
+  const pe=e.target.closest('[data-pe]');
+  if(pe){const r=askLink(window._d.n,+pe.dataset.pe);if(r!==null)toast(r?'Enlace guardado':'Enlace borrado');return}
+  const tb=e.target.closest('[data-tb]');
+  if(tb){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===tb));document.querySelectorAll('[data-pane]').forEach(x=>x.hidden=x.dataset.pane!==tb.dataset.tb);return}
+  const ds=e.target.closest('[data-ds]');
+  if(ds){
+    document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===ds));
+    $('#r').innerHTML='<div class="msg">Cargando…</div>';
+    try{await (ds.dataset.ds==='n'?premieres():trending())}catch(err){$('#r').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
+    return;
+  }
+
   const op=e.target.closest('[data-o]');
   if(op)return openDetail(items[+op.dataset.o]);
   const un=e.target.closest('[data-u]');
@@ -372,14 +473,19 @@ function cfgView(){
   <label>Trakt Client ID</label><input id="cid" value="${esc(cfg.cid||'')}" autocomplete="off">
   <label>TMDB API key (para las carátulas)</label><input id="tm" value="${esc(cfg.tmdb||'')}" autocomplete="off">
   <label>País (2 letras) para saber en qué plataforma está cada título</label><input id="co" maxlength="2" value="${esc(cfg.country||'ES')}" autocomplete="off">
-  <button class="b f" id="con">${tok?'Guardar y reconectar':'Guardar y conectar'}</button>
+  <label>Mis plataformas de streaming</label>
+  <div id="plats">${Object.entries(PLATS).map(([i,q])=>`<label class="chkrow"><input type="checkbox" value="${i}" ${(cfg.subs||[]).includes(+i)?'checked':''}>${q.n}</label>`).join('')}</div>
+  <p class="s">Solo se guarda qué plataformas tienes. No se piden ni se guardan usuarios ni contraseñas: la app de cada plataforma ya tiene tu sesión abierta en el móvil.</p>
+  <button class="b" id="sv">Guardar ajustes</button><button class="b f" id="con">${tok?'Guardar y reconectar':'Guardar y conectar'}</button>
   ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
   <div id="dv"></div></div>`;
   $('#con').onclick=connect;
+  $('#sv').onclick=()=>{saveCfg();toast('Ajustes guardados')};
   if($('#out'))$('#out').onclick=()=>{tok=null;ls.set('tok',null);setNav();cfgView()};
 }
+function saveCfg(){cfg=Object.assign({},cfg,{cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim(),country:($('#co').value.trim().toUpperCase()||'ES'),subs:[...document.querySelectorAll('#plats input:checked')].map(x=>+x.value)});ls.set('cfg',cfg)}
 async function connect(){
-  cfg={cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim(),country:($('#co').value.trim().toUpperCase()||'ES')};
+  saveCfg();
   ls.set('cfg',cfg);
   if(!cfg.cid){toast('Falta el Client ID');return}
   try{
@@ -413,6 +519,7 @@ async function go(t){
   try{await views[t]()}catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
 }
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+new MutationObserver(()=>observePlat()).observe($('#v'),{childList:true,subtree:true});
 go(tab);
 </script>
 </body>
