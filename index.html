@@ -29,6 +29,9 @@ input{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px sol
 .msg{padding:24px 16px;color:var(--mu)}
 .code{font:700 32px Georgia,serif;letter-spacing:4px;color:var(--ac);margin:8px 0}
 a{color:var(--ac)}
+.t[data-o]{cursor:pointer}
+details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
+.ok{color:var(--ac);font-weight:700;padding:0 6px}
 #toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.on{opacity:1}
 </style>
@@ -79,9 +82,9 @@ function norm(x){
 const fmt=d=>d?new Date(d).toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'}):'';
 
 function card(n,btns,idx){
-  const o=n.o,sub=n.kind==='episode'?`T${n.ep.season}·E${n.ep.number} ${n.ep.title||''}`:(n.kind==='movie'?'Película':'Serie');
+  const o=n.o,sub=n.kind==='group'?n.sub:n.kind==='episode'?`T${n.ep.season}·E${n.ep.number} ${n.ep.title||''}`:(n.kind==='movie'?'Película':'Serie');
   const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${n.extra||fmt(n.date)}</div>${bt}</div></div>`;
+  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${n.extra||fmt(n.date)}</div>${bt}</div></div>`;
 }
 let items=[];
 async function render(list,btnsFor,empty,pre){
@@ -108,8 +111,23 @@ const views={
     await drawProg();
   },
   async hist(){
-    const d=await tr('/sync/history?limit=40');
-    await render(d,n=>[],'Aún no has marcado nada como visto.');
+    const d=await tr('/sync/history?limit=100');
+    const out=[],g={};
+    for(const x of d){
+      const n=norm(x);if(!n)continue;
+      if(n.kind==='episode'){
+        const k=n.o.ids.trakt;
+        if(!g[k]){g[k]={kind:'group',o:n.o,eps:[],date:n.date};out.push(g[k])}
+        g[k].eps.push(n.ep);
+      }else out.push(n);
+    }
+    out.forEach(n=>{
+      if(n.kind!=='group')return;
+      const e=n.eps.slice().sort((a,b)=>a.season-b.season||a.number-b.number),a=e[0],z=e[e.length-1];
+      const A=`T${a.season}·E${a.number}`,Z=a.season===z.season?`E${z.number}`:`T${z.season}·E${z.number}`;
+      n.sub=`${n.eps.length} ${n.eps.length===1?'episodio':'episodios'} · ${n.eps.length===1?A:A+'–'+Z}`;
+    });
+    await render(null,()=>[],'Aún no has marcado nada como visto.',out);
   },
   async wl(){
     const d=await tr('/sync/watchlist');
@@ -146,7 +164,64 @@ async function renderInto(list,label){
   });
 }
 
+function loadPosters(){
+  document.querySelectorAll('[data-p]').forEach(async el=>{
+    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
+    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+  });
+}
+async function openDetail(n){
+  const o=n.o,isM=n.kind==='movie',base=(isM?'/movies/':'/shows/')+o.ids.trakt;
+  $('#h').textContent=o.title;
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  try{
+    const [d,tx,pr,se]=await Promise.all([
+      tr(base+'?extended=full'),
+      tr(base+'/translations/es').catch(()=>[]),
+      isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
+      isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[])
+    ]);
+    const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
+    const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.status,d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
+    const done={};
+    if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
+    const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
+      const eps=(s.episodes||[]).map(x=>{
+        const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date();
+        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div>${ok?'<span class="ok">✓</span>':fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</div>`;
+      }).join('');
+      const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
+      return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
+    }).join('');
+    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
+    <div class="it"><div class="ph" data-p="${isM?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
+    ${isM?`<button class="b f" data-d="seen">Visto</button>`:''}<button class="b" data-d="later">+ Pendiente</button></div></div>
+    <div class="box"><p>${esc(ov)}</p></div>${seasons}`;
+    $('#back').onclick=()=>go(tab);
+    window._d={isM,id:o.ids.trakt};
+    loadPosters();
+  }catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
+}
 document.addEventListener('click',async e=>{
+  const op=e.target.closest('[data-o]');
+  if(op)return openDetail(items[+op.dataset.o]);
+  const ep=e.target.closest('[data-e]');
+  if(ep){
+    ep.disabled=true;
+    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+ep.dataset.e}}]}});ep.outerHTML='<span class="ok">✓</span>';toast('Marcado como visto')}
+    catch(err){toast(err.message);ep.disabled=false}
+    return;
+  }
+  const dd=e.target.closest('[data-d]');
+  if(dd){
+    const {isM,id}=window._d,ids=[{ids:{trakt:id}}];dd.disabled=true;
+    try{
+      if(dd.dataset.d==='seen')await tr('/sync/history',{body:{movies:ids}});
+      else await tr('/sync/watchlist',{body:isM?{movies:ids}:{shows:ids}});
+      toast('Hecho')
+    }catch(err){toast(err.message);dd.disabled=false}
+    return;
+  }
   const b=e.target.closest('[data-a]');if(!b)return;
   const n=items[+b.dataset.i];b.disabled=true;
   try{
