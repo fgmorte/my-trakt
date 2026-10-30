@@ -8,32 +8,41 @@
 <link rel="icon" href="icon-192.png">
 <title>Mi Trakt</title>
 <style>
-:root{--bg:#f4f1f6;--card:#fff;--tx:#1d1a24;--mu:#6d6778;--ac:#d6336c;--ln:#e3dfea;color-scheme:light}
+:root{--bg:#f4f1f6;--card:#fff;--tx:#1d1a24;--mu:#6d6778;--ac:#d6336c;--on:#fff;--ln:#e3dfea;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#16131d;--card:#221e2c;--tx:#efebf5;--mu:#9d96ac;--ac:#ff6b9a;--ln:#332d40;color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom))}
-h1{font:700 22px Georgia,serif;margin:0;padding:16px}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom))}
+h1{font:700 26px Georgia,serif;margin:0;padding:18px 16px 8px}
 main{max-width:640px;margin:0 auto}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;background:none;color:var(--mu);padding:14px 2px;font:inherit;font-size:12px}
-nav button.on{color:var(--ac);font-weight:700;box-shadow:inset 0 3px var(--ac)}
-.it{display:flex;gap:12px;padding:10px 16px;border-bottom:1px solid var(--ln)}
-.it img,.ph{width:62px;height:93px;border-radius:4px;object-fit:cover;background:var(--ln);flex:none}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--mu);padding:8px 0 8px;font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav .ic{font-size:20px;filter:grayscale(1);opacity:.55}
+nav button.on{color:var(--tx);font-weight:700}
+nav button.on .ic{filter:none;opacity:1}
+nav button.on::after{content:"";width:22px;height:3px;border-radius:2px;background:var(--ac)}
+.sec{padding:18px 16px 4px;font-size:18px;font-weight:800}
+.it{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln)}
+.it img,.ph{width:72px;height:108px;border-radius:8px;object-fit:cover;background:var(--card);flex:none}
 .it div{flex:1;min-width:0}
-.t{font-weight:700}.s{color:var(--mu);font-size:13px}
-.b{display:inline-block;margin:8px 6px 0 0;padding:6px 12px;border-radius:99px;border:1px solid var(--ac);background:none;color:var(--ac);font:inherit;font-size:13px}
-.b.f{background:var(--ac);color:#fff}
+.t{font-weight:700;font-size:16px}.s{color:var(--mu);font-size:13px}.sub{font-weight:700;font-size:13px;margin-top:2px}
+.bar{height:4px;background:var(--ln);border-radius:2px;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
+.b{display:inline-block;margin:8px 6px 0 0;padding:6px 14px;border-radius:99px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit;font-size:13px;font-weight:600}
+.b.f{background:var(--ac);border-color:var(--ac);color:var(--on)}
 .b:disabled{opacity:.5}
-input{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit}
+.chk{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--ac);background:none;color:var(--ac);font-size:20px;font-weight:800;align-self:center}
+.chk:active,.chk:disabled{background:var(--ac);color:var(--on)}
+input{width:100%;padding:12px;margin:6px 0 12px;border-radius:10px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit}
 .box{padding:16px}.box label{font-size:13px;color:var(--mu)}
 .msg{padding:24px 16px;color:var(--mu)}
-.code{font:700 32px Georgia,serif;letter-spacing:4px;color:var(--ac);margin:8px 0}
-a{color:var(--ac)}
-.t[data-o]{cursor:pointer}
+.code{font:700 32px Georgia,serif;letter-spacing:4px;background:var(--ac);color:var(--on);display:inline-block;padding:4px 12px;border-radius:8px;margin:8px 0}
+a{color:var(--tx);text-decoration:underline var(--ac)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+#toast.on{opacity:1}
+#toast button{color:var(--ac)!important}
+[data-o]{cursor:pointer}
 details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
 .ok{color:var(--ac);font-weight:700;padding:0 6px}
-#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
-#toast.on{opacity:1}
 </style>
 </head>
 <body>
@@ -44,12 +53,18 @@ details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0
 const $=s=>document.querySelector(s);
 const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
-let cfg=Object.assign({cid:DEFAULT_CID},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
+const DEFAULT_TMDB='1ecd17043eeaf60425225d378af33c0a';
+let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
 if(!cfg.cid)cfg.cid=DEFAULT_CID;
+if(!cfg.tmdb)cfg.tmdb=DEFAULT_TMDB;
 const posters=ls.get('posters')||{};
 const API='https://api.trakt.tv';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2000)}
+function toast(m,undo){
+  const t=$('#toast');t.textContent=m;t.style.pointerEvents=undo?'auto':'none';
+  if(undo){const b=document.createElement('button');b.textContent='Deshacer';b.style.cssText='margin-left:12px;border:0;background:none;color:var(--ac);font:inherit;font-weight:700';b.onclick=()=>{t.classList.remove('on');undo()};t.appendChild(b)}
+  t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),undo?6000:2000);
+}
 
 async function tr(path,opt={}){
   const h={'Content-Type':'application/json','trakt-api-version':'2','trakt-api-key':cfg.cid};
@@ -82,31 +97,39 @@ function norm(x){
 const fmt=d=>d?new Date(d).toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'}):'';
 
 function card(n,btns,idx){
-  const o=n.o,sub=n.kind==='group'?n.sub:n.kind==='episode'?`T${n.ep.season}·E${n.ep.number} ${n.ep.title||''}`:(n.kind==='movie'?'Película':'Serie');
-  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${n.extra||fmt(n.date)}</div>${bt}</div></div>`;
+  const o=n.o,pad=x=>String(x).padStart(2,'0');
+  const sub=n.kind==='group'?n.sub:n.kind==='episode'?`T${pad(n.ep.season)} | E${pad(n.ep.number)}`:(n.kind==='movie'?'Película':'Serie');
+  const ept=n.kind==='episode'&&n.ep.title?`<div class="s">${esc(n.ep.title)}</div>`:'';
+  const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
+  const chk=btns.find(b=>b[0]==='seen');
+  const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
+  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 let items=[];
 async function render(list,btnsFor,empty,pre){
   items=pre||list.map(norm).filter(Boolean);
-  $('#v').innerHTML=items.length?items.map((n,i)=>card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
+  $('#v').innerHTML=items.length?items.map((n,i)=>n.kind==='head'?`<div class="sec">${n.t}</div>`:card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
   document.querySelectorAll('[data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+    if(u)el.outerHTML=imgTag(u,el);
   });
 }
 const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
 let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
 function drawProg(){
-  const its=progData.map(r=>({kind:'episode',o:r.show,ep:r.p.next_episode,date:null,extra:`Llevas ${r.p.completed} de ${r.p.aired} episodios emitidos`}));
+  const mk=r=>({kind:'episode',o:r.show,ep:r.p.next_episode,date:null,pct:r.p.aired?Math.round(r.p.completed/r.p.aired*100):0,extra:r.p.completed?`${r.p.completed} de ${r.p.aired} episodios vistos`:'Pendiente de empezar'});
+  const a=progData.filter(r=>r.p.completed).map(mk),b=progData.filter(r=>!r.p.completed).map(mk);
+  const its=[...(a.length?[{kind:'head',t:'Para ver ahora'}]:[]),...a,...(b.length?[{kind:'head',t:'Sin empezar'}]:[]),...b];
   return render(null,()=>[WATCH],'Estás al día con todas tus series.',its);
 }
 const views={
   async prog(){
-    const w=await tr('/sync/watched/shows?extended=noseasons');
+    const [w,wl]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watchlist/shows').catch(()=>[])]);
     w.sort((a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||''));
-    const res=await Promise.all(w.slice(0,25).map(x=>tr(progPath(x.show.ids.trakt)).then(p=>({show:x.show,p})).catch(()=>null)));
+    const seen=new Set(w.map(x=>x.show.ids.trakt));
+    const shows=w.slice(0,25).map(x=>x.show).concat(wl.map(x=>x.show).filter(x=>!seen.has(x.ids.trakt)).slice(0,15));
+    const res=await Promise.all(shows.map(x=>tr(progPath(x.ids.trakt)).then(p=>({show:x,p})).catch(()=>null)));
     progData=res.filter(r=>r&&r.p.next_episode);
     await drawProg();
   },
@@ -117,9 +140,9 @@ const views={
       const n=norm(x);if(!n)continue;
       if(n.kind==='episode'){
         const k=n.o.ids.trakt;
-        if(!g[k]){g[k]={kind:'group',o:n.o,eps:[],date:n.date};out.push(g[k])}
+        if(!g[k]){g[k]={kind:'group',o:n.o,eps:[],date:n.date,hid:x.id};out.push(g[k])}
         g[k].eps.push(n.ep);
-      }else out.push(n);
+      }else{n.hid=x.id;out.push(n)}
     }
     out.forEach(n=>{
       if(n.kind!=='group')return;
@@ -127,11 +150,11 @@ const views={
       const A=`T${a.season}·E${a.number}`,Z=a.season===z.season?`E${z.number}`:`T${z.season}·E${z.number}`;
       n.sub=`${n.eps.length} ${n.eps.length===1?'episodio':'episodios'} · ${n.eps.length===1?A:A+'–'+Z}`;
     });
-    await render(null,()=>[],'Aún no has marcado nada como visto.',out);
+    await render(null,n=>[['undo',n.kind==='group'?'Deshacer último':'Deshacer']],'Aún no has marcado nada como visto.',out);
   },
   async wl(){
     const d=await tr('/sync/watchlist');
-    await render(d,n=>n.kind==='movie'?[WATCH]:[],'Tu lista de pendientes está vacía. Añade algo desde Descubrir.');
+    await render(d,n=>n.kind==='movie'?[WATCH,['unlist','Quitar']]:[['unlist','Quitar']],'Tu lista de pendientes está vacía. Añade algo desde Descubrir.');
   },
   async cal(){
     const d0=new Date().toISOString().slice(0,10);
@@ -160,14 +183,15 @@ async function renderInto(list,label){
   $('#r').innerHTML=items.length?html:`<div class="msg">${label}</div>`;
   document.querySelectorAll('#r [data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+    if(u)el.outerHTML=imgTag(u,el);
   });
 }
 
+const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}>`;
 function loadPosters(){
   document.querySelectorAll('[data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+    if(u)el.outerHTML=imgTag(u,el);
   });
 }
 async function openDetail(n){
@@ -188,7 +212,7 @@ async function openDetail(n){
     const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
       const eps=(s.episodes||[]).map(x=>{
         const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date();
-        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div>${ok?'<span class="ok">✓</span>':fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</div>`;
+        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div>${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</div>`;
       }).join('');
       const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
       return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
@@ -205,10 +229,17 @@ async function openDetail(n){
 document.addEventListener('click',async e=>{
   const op=e.target.closest('[data-o]');
   if(op)return openDetail(items[+op.dataset.o]);
+  const un=e.target.closest('[data-u]');
+  if(un){
+    un.disabled=true;
+    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+un.dataset.u}}]}});un.outerHTML=`<button class="b" data-e="${un.dataset.u}">Visto</button>`;toast('Visto deshecho')}
+    catch(err){toast(err.message);un.disabled=false}
+    return;
+  }
   const ep=e.target.closest('[data-e]');
   if(ep){
     ep.disabled=true;
-    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+ep.dataset.e}}]}});ep.outerHTML='<span class="ok">✓</span>';toast('Marcado como visto')}
+    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+ep.dataset.e}}]}});ep.outerHTML=`<button class="b f" data-u="${ep.dataset.e}">✓</button>`;toast('Marcado como visto')}
     catch(err){toast(err.message);ep.disabled=false}
     return;
   }
@@ -225,18 +256,22 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b)return;
   const n=items[+b.dataset.i];b.disabled=true;
   try{
+    if(b.dataset.a==='undo'){await tr('/sync/history/remove',{body:{ids:[n.hid]}});toast('Visto deshecho');return go('hist')}
     const ids={ids:{trakt:(n.kind==='episode'?n.ep:n.o).ids.trakt}};
+    if(b.dataset.a==='unlist'){await tr('/sync/watchlist/remove',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});toast('Quitado de pendientes');return go('wl')}
     if(b.dataset.a==='seen'){
-      await tr('/sync/history',{body:n.kind==='episode'?{episodes:[ids]}:{movies:[ids]}});
-      toast('Marcado como visto');
+      const hb=n.kind==='episode'?{episodes:[ids]}:{movies:[ids]};
+      await tr('/sync/history',{body:hb});
+      toast('Marcado como visto',async()=>{try{await tr('/sync/history/remove',{body:hb});toast('Deshecho');go(tab)}catch(err){toast(err.message)}});
       if(tab==='wl'||tab==='cal')go(tab);
       else if(tab==='prog'){
         const r=progData.find(r=>r.show.ids.trakt===n.o.ids.trakt);
         try{r.p=await tr(progPath(n.o.ids.trakt));progData=progData.filter(r=>r.p.next_episode);drawProg()}catch(e){go('prog')}
       }
     }else{
-      await tr('/sync/watchlist',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});
-      toast('Añadido a pendientes');
+      const wb=n.kind==='movie'?{movies:[ids]}:{shows:[ids]};
+      await tr('/sync/watchlist',{body:wb});
+      toast(n.kind==='movie'?'Añadido a pendientes':'Añadido: aparece en Siguiente',async()=>{try{await tr('/sync/watchlist/remove',{body:wb});toast('Quitado')}catch(err){toast(err.message)}});
     }
   }catch(err){toast(err.message);b.disabled=false}
 });
@@ -276,9 +311,9 @@ async function connect(){
   }catch(err){$('#dv').innerHTML=`<p class="s">${esc(err.message)}</p>`}
 }
 
-const TABS=[['prog','Siguiente'],['hist','Visto'],['wl','Pendientes'],['cal','Próximos'],['disc','Descubrir'],['cfg','Ajustes']];
-function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}">${t[1]}</button>`).join('')}
-$('#nav').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)go(t)});
+const TABS=[['prog','Siguiente','📺'],['hist','Visto','🕘'],['wl','Pendientes','🔖'],['cal','Próximos','📅'],['disc','Descubrir','🔍'],['cfg','Ajustes','⚙️']];
+function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span class="ic">${t[2]}</span>${t[1]}</button>`).join('')}
+$('#nav').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)go(t.dataset.t)});
 async function go(t){
   tab=t;setNav();
   $('#h').textContent=TABS.find(x=>x[0]===t)[1];
