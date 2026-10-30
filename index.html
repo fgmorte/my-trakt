@@ -43,6 +43,9 @@ a{color:var(--tx);text-decoration:underline var(--ac)}
 [data-o]{cursor:pointer}
 details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
 .ok{color:var(--ac);font-weight:700;padding:0 6px}
+.seg{display:flex;background:var(--card);border-radius:99px;padding:3px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:none;color:var(--mu);padding:8px;border-radius:99px;font:inherit;font-weight:700}
+.seg button.on{background:var(--ac);color:var(--on)}
 </style>
 </head>
 <body>
@@ -115,6 +118,30 @@ async function render(list,btnsFor,empty,pre){
   });
 }
 const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
+const H={shows:[],movies:[],seg:'show',q:'',found:[],ss:new Set(),sm:new Set()};
+function paintHist(){
+  const q=H.q.trim().toLowerCase();
+  const local=(H.seg==='show'?H.shows:H.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
+  items=[...local,...H.found];
+  let html=local.length?local.map((n,i)=>card(n,n.kind==='movie'?[['undo','Quitar de vistos']]:[],i)).join(''):`<div class="msg">${q?'Ninguna coincidencia en lo que has visto. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'}</div>`;
+  if(H.found.length)html+='<div class="sec">Resultados en Trakt</div>'+H.found.map((n,i)=>card(n,n.seen?[]:n.kind==='movie'?[WATCH,LATER]:[LATER],local.length+i)).join('');
+  $('#hl').innerHTML=html;loadPosters();
+  document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===H.seg));
+}
+async function searchHist(q){
+  q=q.trim();if(!q)return;
+  $('#hl').innerHTML='<div class="msg">Buscando…</div>';
+  try{
+    const d=await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=10`);
+    H.found=d.map(norm).filter(Boolean).map(n=>{
+      n.seen=(n.kind==='movie'?H.sm:H.ss).has(n.o.ids.trakt);
+      n.extra=n.seen?(n.kind==='movie'?'✓ Ya la has visto':'✓ Ya la has empezado a ver'):'Sin ver';
+      return n;
+    });
+    if(!H.found.length)toast('Sin resultados en Trakt');
+  }catch(err){toast(err.message);H.found=[]}
+  paintHist();
+}
 let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
 function drawProg(){
@@ -134,23 +161,17 @@ const views={
     await drawProg();
   },
   async hist(){
-    const d=await tr('/sync/history?limit=100');
-    const out=[],g={};
-    for(const x of d){
-      const n=norm(x);if(!n)continue;
-      if(n.kind==='episode'){
-        const k=n.o.ids.trakt;
-        if(!g[k]){g[k]={kind:'group',o:n.o,eps:[],date:n.date,hid:x.id};out.push(g[k])}
-        g[k].eps.push(n.ep);
-      }else{n.hid=x.id;out.push(n)}
-    }
-    out.forEach(n=>{
-      if(n.kind!=='group')return;
-      const e=n.eps.slice().sort((a,b)=>a.season-b.season||a.number-b.number),a=e[0],z=e[e.length-1];
-      const A=`T${a.season}·E${a.number}`,Z=a.season===z.season?`E${z.number}`:`T${z.season}·E${z.number}`;
-      n.sub=`${n.eps.length} ${n.eps.length===1?'episodio':'episodios'} · ${n.eps.length===1?A:A+'–'+Z}`;
-    });
-    await render(null,n=>[['undo',n.kind==='group'?'Deshacer último':'Deshacer']],'Aún no has marcado nada como visto.',out);
+    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watched/movies')]);
+    const by=(a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||'');
+    sh.sort(by);mv.sort(by);
+    H.ss=new Set(sh.map(x=>x.show.ids.trakt));H.sm=new Set(mv.map(x=>x.movie.ids.trakt));
+    H.shows=sh.map(x=>({kind:'group',o:x.show,date:x.last_watched_at,sub:`${x.plays} ${x.plays===1?'episodio visto':'episodios vistos'}`,extra:'Último: '+fmt(x.last_watched_at)}));
+    H.movies=mv.map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
+    H.found=[];
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">Series (${H.shows.length})</button><button data-sg="movie">Películas (${H.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tus vistos o en Trakt" enterkeyhint="search" value="${esc(H.q)}"></div><div id="hl"></div>`;
+    $('#hq').addEventListener('input',e=>{H.q=e.target.value;H.found=[];paintHist()});
+    $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchHist(e.target.value)});
+    paintHist();
   },
   async wl(){
     const d=await tr('/sync/watchlist');
@@ -227,6 +248,8 @@ async function openDetail(n){
   }catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
 }
 document.addEventListener('click',async e=>{
+  const sg=e.target.closest('[data-sg]');
+  if(sg){H.seg=sg.dataset.sg;H.found=[];return paintHist()}
   const op=e.target.closest('[data-o]');
   if(op)return openDetail(items[+op.dataset.o]);
   const un=e.target.closest('[data-u]');
@@ -256,14 +279,14 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-a]');if(!b)return;
   const n=items[+b.dataset.i];b.disabled=true;
   try{
-    if(b.dataset.a==='undo'){await tr('/sync/history/remove',{body:{ids:[n.hid]}});toast('Visto deshecho');return go('hist')}
+    if(b.dataset.a==='undo'){await tr('/sync/history/remove',{body:n.hid?{ids:[n.hid]}:{movies:[{ids:{trakt:n.o.ids.trakt}}]}});toast('Quitada de vistos');return go('hist')}
     const ids={ids:{trakt:(n.kind==='episode'?n.ep:n.o).ids.trakt}};
     if(b.dataset.a==='unlist'){await tr('/sync/watchlist/remove',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});toast('Quitado de pendientes');return go('wl')}
     if(b.dataset.a==='seen'){
       const hb=n.kind==='episode'?{episodes:[ids]}:{movies:[ids]};
       await tr('/sync/history',{body:hb});
       toast('Marcado como visto',async()=>{try{await tr('/sync/history/remove',{body:hb});toast('Deshecho');go(tab)}catch(err){toast(err.message)}});
-      if(tab==='wl'||tab==='cal')go(tab);
+      if(tab==='wl'||tab==='cal'||tab==='hist')go(tab);
       else if(tab==='prog'){
         const r=progData.find(r=>r.show.ids.trakt===n.o.ids.trakt);
         try{r.p=await tr(progPath(n.o.ids.trakt));progData=progData.filter(r=>r.p.next_episode);drawProg()}catch(e){go('prog')}
