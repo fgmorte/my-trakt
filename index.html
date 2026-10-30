@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16131d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Mi Trakt</title>
+<style>
+:root{--bg:#f4f1f6;--card:#fff;--tx:#1d1a24;--mu:#6d6778;--ac:#d6336c;--ln:#e3dfea;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16131d;--card:#221e2c;--tx:#efebf5;--mu:#9d96ac;--ac:#ff6b9a;--ln:#332d40;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom))}
+h1{font:700 22px Georgia,serif;margin:0;padding:16px}
+main{max-width:640px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--mu);padding:14px 4px;font:inherit;font-size:13px}
+nav button.on{color:var(--ac);font-weight:700;box-shadow:inset 0 3px var(--ac)}
+.it{display:flex;gap:12px;padding:10px 16px;border-bottom:1px solid var(--ln)}
+.it img,.ph{width:62px;height:93px;border-radius:4px;object-fit:cover;background:var(--ln);flex:none}
+.it div{flex:1;min-width:0}
+.t{font-weight:700}.s{color:var(--mu);font-size:13px}
+.b{display:inline-block;margin:8px 6px 0 0;padding:6px 12px;border-radius:99px;border:1px solid var(--ac);background:none;color:var(--ac);font:inherit;font-size:13px}
+.b.f{background:var(--ac);color:#fff}
+.b:disabled{opacity:.5}
+input{width:100%;padding:12px;margin:6px 0 12px;border-radius:8px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit}
+.box{padding:16px}.box label{font-size:13px;color:var(--mu)}
+.msg{padding:24px 16px;color:var(--mu)}
+.code{font:700 32px Georgia,serif;letter-spacing:4px;color:var(--ac);margin:8px 0}
+a{color:var(--ac)}
+#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main><h1 id="h">Mi Trakt</h1><div id="v"></div></main>
+<nav id="nav"></nav>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
+let cfg=Object.assign({cid:DEFAULT_CID},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'hist':'cfg';
+if(!cfg.cid)cfg.cid=DEFAULT_CID;
+const posters=ls.get('posters')||{};
+const API='https://api.trakt.tv';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2000)}
+
+async function tr(path,opt={}){
+  const h={'Content-Type':'application/json','trakt-api-version':'2','trakt-api-key':cfg.cid};
+  if(tok)h.Authorization='Bearer '+tok.access_token;
+  const r=await fetch(API+path,{method:opt.body?'POST':'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined});
+  if(r.status===401&&tok){tok=null;ls.set('tok',null);go('cfg');throw new Error('Sesión caducada. Vuelve a conectar.')}
+  if(!r.ok)throw new Error('Trakt respondió '+r.status);
+  return r.json();
+}
+async function poster(kind,tmdb){
+  if(!cfg.tmdb||!tmdb)return '';
+  const k=kind+tmdb;
+  if(posters[k]!==undefined)return posters[k];
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/${kind==='movie'?'movie':'tv'}/${tmdb}?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    const d=await r.json();
+    posters[k]=d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'';
+    ls.set('posters',posters);
+  }catch(e){posters[k]=''}
+  return posters[k];
+}
+
+// Normaliza cualquier respuesta de Trakt a {kind,o,ep,date}
+function norm(x){
+  if(x.episode&&x.show)return{kind:'episode',o:x.show,ep:x.episode,date:x.watched_at||x.first_aired};
+  if(x.movie)return{kind:'movie',o:x.movie,date:x.watched_at||x.listed_at};
+  if(x.show)return{kind:'show',o:x.show,date:x.listed_at};
+  return null;
+}
+const fmt=d=>d?new Date(d).toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'}):'';
+
+function card(n,btns,idx){
+  const o=n.o,sub=n.kind==='episode'?`T${n.ep.season}·E${n.ep.number} ${n.ep.title||''}`:(n.kind==='movie'?'Película':'Serie');
+  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
+  return `<div class="it"><div class="ph" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(o.title)} <span class="s">${o.year||''}</span></div><div class="s">${esc(sub)}</div><div class="s">${fmt(n.date)}</div>${bt}</div></div>`;
+}
+let items=[];
+async function render(list,btnsFor,empty){
+  items=list.map(norm).filter(Boolean);
+  $('#v').innerHTML=items.length?items.map((n,i)=>card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
+  document.querySelectorAll('[data-p]').forEach(async el=>{
+    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
+    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+  });
+}
+const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
+const views={
+  async hist(){
+    const d=await tr('/sync/history?limit=40');
+    await render(d,n=>[],'Aún no has marcado nada como visto.');
+  },
+  async wl(){
+    const d=await tr('/sync/watchlist');
+    await render(d,n=>n.kind==='movie'?[WATCH]:[],'Tu lista de pendientes está vacía. Añade algo desde Descubrir.');
+  },
+  async cal(){
+    const d0=new Date().toISOString().slice(0,10);
+    const d=await tr(`/calendars/my/shows/${d0}/14`);
+    await render(d,n=>[WATCH],'No hay episodios de tus series en los próximos 14 días.');
+  },
+  async disc(){
+    $('#v').innerHTML=`<div class="box"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#q').addEventListener('keydown',e=>{if(e.key==='Enter')search(e.target.value)});
+    await trending();
+  }
+};
+async function trending(){
+  const [m,s]=await Promise.all([tr('/movies/trending?limit=10'),tr('/shows/trending?limit=10')]);
+  const box=document.createElement('div');
+  await renderInto([...m,...s],'Tendencias');
+}
+async function search(q){
+  q=q.trim();if(!q)return;
+  const d=await tr(`/search/movie,show?query=${encodeURIComponent(q)}&limit=15`);
+  await renderInto(d,'Sin resultados.');
+}
+async function renderInto(list,label){
+  items=list.map(norm).filter(Boolean);
+  const html=items.map((n,i)=>card(n,n.kind==='movie'?[WATCH,LATER]:[LATER],i)).join('');
+  $('#r').innerHTML=items.length?html:`<div class="msg">${label}</div>`;
+  document.querySelectorAll('#r [data-p]').forEach(async el=>{
+    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
+    if(u)el.outerHTML=`<img src="${u}" alt="" loading="lazy">`;
+  });
+}
+
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-a]');if(!b)return;
+  const n=items[+b.dataset.i];b.disabled=true;
+  try{
+    const ids={ids:{trakt:(n.kind==='episode'?n.ep:n.o).ids.trakt}};
+    if(b.dataset.a==='seen'){
+      await tr('/sync/history',{body:n.kind==='episode'?{episodes:[ids]}:{movies:[ids]}});
+      toast('Marcado como visto');
+      if(tab==='wl'||tab==='cal')go(tab);
+    }else{
+      await tr('/sync/watchlist',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});
+      toast('Añadido a pendientes');
+    }
+  }catch(err){toast(err.message);b.disabled=false}
+});
+
+// Conexión con Trakt (device code)
+function cfgView(){
+  $('#v').innerHTML=`<div class="box">
+  <p class="s">Crea tu app en <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> (solo necesitas el Client ID) y tu clave gratuita en <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org</a>. Todo se guarda solo en este dispositivo.</p>
+  <label>Trakt Client ID</label><input id="cid" value="${esc(cfg.cid||'')}" autocomplete="off">
+  <label>TMDB API key (para las carátulas)</label><input id="tm" value="${esc(cfg.tmdb||'')}" autocomplete="off">
+  <button class="b f" id="con">${tok?'Guardar y reconectar':'Guardar y conectar'}</button>
+  ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
+  <div id="dv"></div></div>`;
+  $('#con').onclick=connect;
+  if($('#out'))$('#out').onclick=()=>{tok=null;ls.set('tok',null);setNav();cfgView()};
+}
+async function connect(){
+  cfg={cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim()};
+  ls.set('cfg',cfg);
+  if(!cfg.cid){toast('Falta el Client ID');return}
+  try{
+    const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const ver=b64(crypto.getRandomValues(new Uint8Array(64)));
+    const chal=b64(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ver)));
+    const r=await fetch(API+'/oauth/device/code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cfg.cid,code_challenge:chal,code_challenge_method:'S256'})});
+    if(!r.ok)throw new Error('Client ID no válido');
+    const d=await r.json();
+    $('#dv').innerHTML=`<p>Abre <a href="${d.verification_url}" target="_blank" rel="noopener">${d.verification_url}</a> e introduce:</p><div class="code">${esc(d.user_code)}</div><p class="s">Esperando confirmación…</p>`;
+    const end=Date.now()+d.expires_in*1000;
+    while(Date.now()<end){
+      await new Promise(r=>setTimeout(r,d.interval*1000));
+      const p=await fetch(API+'/oauth/device/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:d.device_code,client_id:cfg.cid,code_verifier:ver})});
+      if(p.status===200){tok=await p.json();ls.set('tok',tok);toast('Conectado');setNav();return go('hist')}
+      if(p.status!==400&&p.status!==429)throw new Error('Conexión rechazada ('+p.status+')');
+    }
+    throw new Error('El código ha caducado. Inténtalo de nuevo.');
+  }catch(err){$('#dv').innerHTML=`<p class="s">${esc(err.message)}</p>`}
+}
+
+const TABS=[['hist','Visto'],['wl','Pendientes'],['cal','Próximos'],['disc','Descubrir'],['cfg','Ajustes']];
+function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}">${t[1]}</button>`).join('')}
+$('#nav').addEventListener('click',e=>{const t=e.target.dataset.t;if(t)go(t)});
+async function go(t){
+  tab=t;setNav();
+  $('#h').textContent=TABS.find(x=>x[0]===t)[1];
+  if(t==='cfg')return cfgView();
+  if(!tok){toast('Conecta primero tu cuenta de Trakt');tab='cfg';setNav();return cfgView()}
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  try{await views[t]()}catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
+}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+go(tab);
+</script>
+</body>
+</html>
