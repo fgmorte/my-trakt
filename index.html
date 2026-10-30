@@ -57,7 +57,7 @@ const $=s=>document.querySelector(s);
 const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
 const DEFAULT_TMDB='1ecd17043eeaf60425225d378af33c0a';
-let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
+let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB,country:((navigator.language||'es-ES').split('-')[1]||'ES').toUpperCase()},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
 if(!cfg.cid)cfg.cid=DEFAULT_CID;
 if(!cfg.tmdb)cfg.tmdb=DEFAULT_TMDB;
 const posters=ls.get('posters')||{};
@@ -118,29 +118,63 @@ async function render(list,btnsFor,empty,pre){
   });
 }
 const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
-const H={shows:[],movies:[],seg:'show',q:'',found:[],ss:new Set(),sm:new Set()};
-function paintHist(){
-  const q=H.q.trim().toLowerCase();
-  const local=(H.seg==='show'?H.shows:H.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
-  items=[...local,...H.found];
-  let html=local.length?local.map((n,i)=>card(n,n.kind==='movie'?[['undo','Quitar de vistos']]:[],i)).join(''):`<div class="msg">${q?'Ninguna coincidencia en lo que has visto. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'}</div>`;
-  if(H.found.length)html+='<div class="sec">Resultados en Trakt</div>'+H.found.map((n,i)=>card(n,n.seen?[]:n.kind==='movie'?[WATCH,LATER]:[LATER],local.length+i)).join('');
-  $('#hl').innerHTML=html;loadPosters();
-  document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===H.seg));
+const ST={hist:{shows:[],movies:[],seg:'show',q:'',found:[]},wl:{shows:[],movies:[],seg:'show',q:'',found:[]}};
+const SEEN={s:new Set(),m:new Set()};
+const WL={s:new Set(),m:new Set(),ok:false};
+const cur=()=>ST[tab];
+async function loadWL(){
+  if(WL.ok)return;
+  const [a,b]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies')]);
+  WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
 }
-async function searchHist(q){
-  q=q.trim();if(!q)return;
+const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
+const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
+function listBtns(n){
+  if(tab==='hist')return n.kind==='movie'?[['undo','Quitar de vistos']]:[];
+  return n.kind==='movie'?[WATCH,FOLLOW(n)]:[FOLLOW(n)];
+}
+function foundBtns(n){
+  if(tab==='hist'&&n.seen)return [];
+  return n.kind==='movie'?[WATCH,FOLLOW(n)]:[FOLLOW(n)];
+}
+function paintList(){
+  const S=cur(),q=S.q.trim().toLowerCase();
+  const local=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
+  items=[...local,...S.found];
+  let html=local.length?local.map((n,i)=>card(n,listBtns(n),i)).join(''):`<div class="msg">${q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'}</div>`;
+  if(S.found.length)html+='<div class="sec">Resultados en Trakt</div>'+S.found.map((n,i)=>card(n,foundBtns(n),local.length+i)).join('');
+  $('#hl').innerHTML=html;loadPosters();
+  document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===S.seg));
+}
+function listShell(ph){
+  const S=cur();
+  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">Series (${S.shows.length})</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="${ph}" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
+  $('#hq').addEventListener('input',e=>{S.q=e.target.value;S.found=[];paintList()});
+  $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchList(e.target.value)});
+  paintList();
+}
+async function searchList(q){
+  q=q.trim();if(!q)return;const S=cur();
   $('#hl').innerHTML='<div class="msg">Buscando…</div>';
   try{
     const d=await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=10`);
-    H.found=d.map(norm).filter(Boolean).map(n=>{
-      n.seen=(n.kind==='movie'?H.sm:H.ss).has(n.o.ids.trakt);
-      n.extra=n.seen?(n.kind==='movie'?'✓ Ya la has visto':'✓ Ya la has empezado a ver'):'Sin ver';
+    S.found=d.map(norm).filter(Boolean).map(n=>{
+      const isM=n.kind==='movie';
+      if(tab==='hist'){n.seen=(isM?SEEN.m:SEEN.s).has(n.o.ids.trakt);n.extra=n.seen?(isM?'✓ Ya la has visto':'✓ Ya la has empezado a ver'):'Sin ver'}
+      else n.extra=following(n)?'✓ Ya la sigues':'No la sigues';
       return n;
     });
-    if(!H.found.length)toast('Sin resultados en Trakt');
-  }catch(err){toast(err.message);H.found=[]}
-  paintHist();
+    if(!S.found.length)toast('Sin resultados en Trakt');
+  }catch(err){toast(err.message);S.found=[]}
+  paintList();
+}
+const PLAT={8:'https://www.netflix.com/search?q=',119:'https://www.primevideo.com/search?phrase=',9:'https://www.primevideo.com/search?phrase=',337:'https://www.disneyplus.com/search?q=',1899:'https://play.max.com/search?q=',384:'https://play.max.com/search?q=',350:'https://tv.apple.com/search?term=',63:'https://www.filmin.es/buscar?q=',283:'https://www.crunchyroll.com/search?q='};
+async function providers(kind,tmdb){
+  if(!cfg.tmdb||!tmdb)return null;
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/${kind}/${tmdb}/watch/providers?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    const d=await r.json();return (d.results&&d.results[cfg.country])||null;
+  }catch(e){return null}
 }
 let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
@@ -161,21 +195,26 @@ const views={
     await drawProg();
   },
   async hist(){
-    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watched/movies')]);
+    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watched/movies'),loadWL().catch(()=>{})]);
     const by=(a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||'');
     sh.sort(by);mv.sort(by);
-    H.ss=new Set(sh.map(x=>x.show.ids.trakt));H.sm=new Set(mv.map(x=>x.movie.ids.trakt));
-    H.shows=sh.map(x=>({kind:'group',o:x.show,date:x.last_watched_at,sub:`${x.plays} ${x.plays===1?'episodio visto':'episodios vistos'}`,extra:'Último: '+fmt(x.last_watched_at)}));
-    H.movies=mv.map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
-    H.found=[];
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">Series (${H.shows.length})</button><button data-sg="movie">Películas (${H.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tus vistos o en Trakt" enterkeyhint="search" value="${esc(H.q)}"></div><div id="hl"></div>`;
-    $('#hq').addEventListener('input',e=>{H.q=e.target.value;H.found=[];paintHist()});
-    $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchHist(e.target.value)});
-    paintHist();
+    SEEN.s=new Set(sh.map(x=>x.show.ids.trakt));SEEN.m=new Set(mv.map(x=>x.movie.ids.trakt));
+    const S=ST.hist;
+    S.shows=sh.map(x=>({kind:'group',o:x.show,date:x.last_watched_at,sub:`${x.plays} ${x.plays===1?'episodio visto':'episodios vistos'}`,extra:'Último: '+fmt(x.last_watched_at)}));
+    S.movies=mv.map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
+    S.found=[];
+    listShell('Buscar en tus vistos o en Trakt');
   },
   async wl(){
-    const d=await tr('/sync/watchlist');
-    await render(d,n=>n.kind==='movie'?[WATCH,['unlist','Quitar']]:[['unlist','Quitar']],'Tu lista de pendientes está vacía. Añade algo desde Descubrir.');
+    const [a,b]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies')]);
+    const by=(x,y)=>(y.listed_at||'').localeCompare(x.listed_at||'');
+    a.sort(by);b.sort(by);
+    WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
+    const S=ST.wl;
+    S.shows=a.map(x=>({kind:'show',o:x.show,date:x.listed_at,extra:'Añadida el '+fmt(x.listed_at)}));
+    S.movies=b.map(x=>({kind:'movie',o:x.movie,date:x.listed_at,extra:'Añadida el '+fmt(x.listed_at)}));
+    S.found=[];
+    listShell('Buscar en tus pendientes o en Trakt');
   },
   async cal(){
     const d0=new Date().toISOString().slice(0,10);
@@ -188,6 +227,7 @@ const views={
     await render(null,n=>n.aired?[WATCH]:[],'No hay episodios de tus series en los próximos 14 días.',its);
   },
   async disc(){
+    await loadWL().catch(()=>{});
     $('#v').innerHTML=`<div class="box"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter')search(e.target.value)});
     await trending();
@@ -205,7 +245,7 @@ async function search(q){
 }
 async function renderInto(list,label){
   items=list.map(norm).filter(Boolean);
-  const html=items.map((n,i)=>card(n,n.kind==='movie'?[WATCH,LATER]:[LATER],i)).join('');
+  const html=items.map((n,i)=>card(n,n.kind==='movie'?[WATCH,FOLLOW(n)]:[FOLLOW(n)],i)).join('');
   $('#r').innerHTML=items.length?html:`<div class="msg">${label}</div>`;
   document.querySelectorAll('#r [data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
@@ -225,27 +265,35 @@ async function openDetail(n){
   $('#h').textContent=o.title;
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
   try{
-    const [d,tx,pr,se]=await Promise.all([
+    const [d,tx,pr,se,pv]=await Promise.all([
       tr(base+'?extended=full'),
       tr(base+'/translations/es').catch(()=>[]),
       isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
-      isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[])
+      isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[]),
+      providers(isM?'movie':'tv',o.ids.tmdb),
+      loadWL().catch(()=>{})
     ]);
     const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
     const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.status,d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
+    const fl=(pv&&pv.flatrate)||[];
+    const purl=q=>(PLAT[q.provider_id]?PLAT[q.provider_id]+encodeURIComponent(d.title):(pv&&pv.link)||'#');
+    const pbtn=fl.map(q=>`<a class="b f" href="${purl(q)}" target="_blank" rel="noopener">▶ Ver en ${esc(q.provider_name)}</a>`).join('')||(pv&&pv.link?`<a class="b" href="${pv.link}" target="_blank" rel="noopener">Dónde verla</a>`:'');
+    const first=fl[0]?purl(fl[0]):'';
+    const fol=(isM?WL.m:WL.s).has(o.ids.trakt);
     const done={};
     if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
     const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
       const eps=(s.episodes||[]).map(x=>{
         const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date();
-        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div>${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</div>`;
+        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${!fut&&first?`<a class="b" href="${first}" target="_blank" rel="noopener" title="Abrir en la plataforma">▶</a>`:''}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
       }).join('');
       const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
       return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
     <div class="it"><div class="ph" data-p="${isM?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
-    ${isM?`<button class="b f" data-d="seen">Visto</button>`:''}<button class="b" data-d="later">+ Pendiente</button></div></div>
+    ${isM?`<button class="b f" data-d="seen">Visto</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div>
+    ${pbtn?`<div class="box" style="padding-bottom:0">${pbtn}<div class="s" style="margin-top:10px">Abre la app de la plataforma buscando este título. Para enviarlo al Chromecast, usa el icono de Cast dentro de esa app.</div></div>`:''}
     <div class="box"><p>${esc(ov)}</p></div>${seasons}`;
     $('#back').onclick=()=>go(tab);
     window._d={isM,id:o.ids.trakt};
@@ -254,7 +302,7 @@ async function openDetail(n){
 }
 document.addEventListener('click',async e=>{
   const sg=e.target.closest('[data-sg]');
-  if(sg){H.seg=sg.dataset.sg;H.found=[];return paintHist()}
+  if(sg){const S=cur();S.seg=sg.dataset.sg;S.found=[];return paintList()}
   const op=e.target.closest('[data-o]');
   if(op)return openDetail(items[+op.dataset.o]);
   const un=e.target.closest('[data-u]');
@@ -275,10 +323,15 @@ document.addEventListener('click',async e=>{
   if(dd){
     const {isM,id}=window._d,ids=[{ids:{trakt:id}}];dd.disabled=true;
     try{
-      if(dd.dataset.d==='seen')await tr('/sync/history',{body:{movies:ids}});
-      else await tr('/sync/watchlist',{body:isM?{movies:ids}:{shows:ids}});
-      toast('Hecho')
-    }catch(err){toast(err.message);dd.disabled=false}
+      if(dd.dataset.d==='seen'){await tr('/sync/history',{body:{movies:ids}});dd.textContent='✓ Vista';toast('Marcada como vista')}
+      else{
+        const set=isM?WL.m:WL.s,on=set.has(id),body=isM?{movies:ids}:{shows:ids};
+        await tr(on?'/sync/watchlist/remove':'/sync/watchlist',{body});
+        on?set.delete(id):set.add(id);
+        dd.textContent=on?'+ Seguir':'✓ Siguiendo';dd.classList.toggle('f',!on);toast(on?'Dejaste de seguirla':'Siguiendo');
+      }
+    }catch(err){toast(err.message)}
+    dd.disabled=false;
     return;
   }
   const b=e.target.closest('[data-a]');if(!b)return;
@@ -286,7 +339,15 @@ document.addEventListener('click',async e=>{
   try{
     if(b.dataset.a==='undo'){await tr('/sync/history/remove',{body:n.hid?{ids:[n.hid]}:{movies:[{ids:{trakt:n.o.ids.trakt}}]}});toast('Quitada de vistos');return go('hist')}
     const ids={ids:{trakt:(n.kind==='episode'?n.ep:n.o).ids.trakt}};
-    if(b.dataset.a==='unlist'){await tr('/sync/watchlist/remove',{body:n.kind==='movie'?{movies:[ids]}:{shows:[ids]}});toast('Quitado de pendientes');return go('wl')}
+    if(b.dataset.a==='follow'){
+      const isM=n.kind==='movie',set=isM?WL.m:WL.s,id=n.o.ids.trakt,body=isM?{movies:[ids]}:{shows:[ids]},on=set.has(id);
+      await tr(on?'/sync/watchlist/remove':'/sync/watchlist',{body});
+      on?set.delete(id):set.add(id);
+      toast(on?'Dejaste de seguirla':'Siguiendo',async()=>{try{await tr(on?'/sync/watchlist':'/sync/watchlist/remove',{body});on?set.add(id):set.delete(id);toast('Deshecho');go(tab)}catch(err){toast(err.message)}});
+      if(tab==='wl'&&on){const S=ST.wl;S.shows=S.shows.filter(x=>x.o.ids.trakt!==id);S.movies=S.movies.filter(x=>x.o.ids.trakt!==id);listShell('Buscar en tus pendientes o en Trakt')}
+      else{b.textContent=on?'+ Seguir':'✓ Siguiendo';b.classList.toggle('f',!on);b.disabled=false}
+      return;
+    }
     if(b.dataset.a==='seen'){
       const hb=n.kind==='episode'?{episodes:[ids]}:{movies:[ids]};
       await tr('/sync/history',{body:hb});
@@ -310,6 +371,7 @@ function cfgView(){
   <p class="s">Crea tu app en <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> (solo necesitas el Client ID) y tu clave gratuita en <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org</a>. Todo se guarda solo en este dispositivo.</p>
   <label>Trakt Client ID</label><input id="cid" value="${esc(cfg.cid||'')}" autocomplete="off">
   <label>TMDB API key (para las carátulas)</label><input id="tm" value="${esc(cfg.tmdb||'')}" autocomplete="off">
+  <label>País (2 letras) para saber en qué plataforma está cada título</label><input id="co" maxlength="2" value="${esc(cfg.country||'ES')}" autocomplete="off">
   <button class="b f" id="con">${tok?'Guardar y reconectar':'Guardar y conectar'}</button>
   ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
   <div id="dv"></div></div>`;
@@ -317,7 +379,7 @@ function cfgView(){
   if($('#out'))$('#out').onclick=()=>{tok=null;ls.set('tok',null);setNav();cfgView()};
 }
 async function connect(){
-  cfg={cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim()};
+  cfg={cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim(),country:($('#co').value.trim().toUpperCase()||'ES')};
   ls.set('cfg',cfg);
   if(!cfg.cid){toast('Falta el Client ID');return}
   try{
