@@ -180,7 +180,12 @@ const views={
   async cal(){
     const d0=new Date().toISOString().slice(0,10);
     const d=await tr(`/calendars/my/shows/${d0}/14`);
-    await render(d,n=>[WATCH],'No hay episodios de tus series en los próximos 14 días.');
+    const now=new Date(),its=d.map(norm).filter(Boolean).map(n=>{
+      const t=new Date(n.date);n.aired=t<=now;
+      n.extra=(n.aired?'Emitido el ':'Se emite el ')+fmt(n.date)+(n.aired?'':' · '+t.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}));
+      return n;
+    });
+    await render(null,n=>n.aired?[WATCH]:[],'No hay episodios de tus series en los próximos 14 días.',its);
   },
   async disc(){
     $('#v').innerHTML=`<div class="box"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
