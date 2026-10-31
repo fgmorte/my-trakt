@@ -24,6 +24,7 @@ nav button.on::after{content:"";width:22px;height:3px;border-radius:2px;backgrou
 .it{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln)}
 .it img,.ph{width:72px;height:108px;border-radius:8px;object-fit:cover;background:var(--card);flex:none}
 .it div{flex:1;min-width:0}
+#v>.it,#hl>.it,#r>.it{content-visibility:auto;contain-intrinsic-size:auto 132px}
 .t{font-weight:700;font-size:16px}.s{color:var(--mu);font-size:13px}.sub{font-weight:700;font-size:13px;margin-top:2px}
 .bar{height:4px;background:var(--ln);border-radius:2px;margin:8px 0 4px}
 .bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
@@ -42,8 +43,6 @@ a{color:var(--tx);text-decoration:underline var(--ac)}
 #toast button{color:var(--ac)!important}
 [data-o]{cursor:pointer}
 details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
-.ok{color:var(--ac);font-weight:700;padding:0 6px}
-.b.pl{padding:4px 10px;font-size:12px;margin-top:6px}
 [hidden]{display:none!important}
 input[type=checkbox]{width:auto;margin:0 10px 0 0}
 .chkrow{display:flex;align-items:center;padding:6px 0;color:var(--tx);font-size:15px}
@@ -89,6 +88,11 @@ let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB},ls.get('cfg')||{}), to
 if(!cfg.cid)cfg.cid=DEFAULT_CID;
 if(!cfg.tmdb)cfg.tmdb=DEFAULT_TMDB;
 const posters=ls.get('posters')||{};
+let WD=null,navId=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let pq=0;const pw=[];
+async function slot(){if(pq>=6)await new Promise(r=>pw.push(r));pq++}
+function freeSlot(){pq--;const n=pw.shift();if(n)n()}
 const API='https://api.trakt.tv';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(m,undo){
@@ -97,18 +101,30 @@ function toast(m,undo){
   t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),undo?6000:2000);
 }
 
-async function refreshTok(){
-  if(!tok||!tok.refresh_token)return false;
-  try{
-    const r=await fetch(API+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:tok.refresh_token,client_id:cfg.cid,redirect_uri:'http://localhost',grant_type:'refresh_token'})});
-    if(!r.ok)return false;
-    tok=await r.json();ls.set('tok',tok);return true;
-  }catch(e){return false}
+let rfp=null;
+function refreshTok(){
+  if(rfp)return rfp;
+  rfp=(async()=>{
+    if(!tok||!tok.refresh_token)return false;
+    try{
+      const r=await fetch(API+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:tok.refresh_token,client_id:cfg.cid,redirect_uri:'http://localhost',grant_type:'refresh_token'})});
+      if(!r.ok)return false;
+      tok=await r.json();ls.set('tok',tok);return true;
+    }catch(e){return false}
+  })().finally(()=>{rfp=null});
+  return rfp;
 }
 async function tr(path,opt={}){
   const h={'Content-Type':'application/json','trakt-api-version':'2','trakt-api-key':cfg.cid};
   if(tok)h.Authorization='Bearer '+tok.access_token;
-  const r=await fetch(API+path,{method:opt.body?'POST':'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined});
+  if(opt.body&&path.startsWith('/sync/history')){WD=null;PG.clear()}
+  let r;
+  for(let a=0;a<3;a++){
+    try{r=await fetch(API+path,{method:opt.body?'POST':'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined})}
+    catch(e){if(opt.body||a===2)throw new Error('No se pudo contactar con Trakt. Comprueba la conexión o inténtalo en unos minutos.');await sleep(900*(a+1));continue}
+    if(!opt.body&&a<2&&(r.status===429||r.status>=500)){await sleep((+r.headers.get('retry-after')||1)*1000*(a+1));continue}
+    break;
+  }
   if(r.status===401&&tok&&!opt.retried&&await refreshTok())return tr(path,Object.assign({},opt,{retried:true}));
   if(r.status===401&&tok){tok=null;ls.set('tok',null);const ae=new Error('Sesión caducada. Vuelve a conectar con Trakt.');ae.auth=true;throw ae}
   if(!r.ok)throw new Error('Trakt respondió '+r.status);
@@ -118,13 +134,16 @@ async function poster(kind,tmdb){
   if(!cfg.tmdb||!tmdb)return '';
   const k=kind+tmdb;
   if(posters[k]!==undefined)return posters[k];
+  await slot();
   try{
     const r=await fetch(`https://api.themoviedb.org/3/${kind==='movie'?'movie':'tv'}/${tmdb}?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    if(!r.ok)return '';
     const d=await r.json();
     posters[k]=d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'';
-    ls.set('posters',posters);
-  }catch(e){posters[k]=''}
-  return posters[k];
+    clearTimeout(poster.t);poster.t=setTimeout(()=>ls.set('posters',posters),600);
+    return posters[k];
+  }catch(e){return ''}
+  finally{freeSlot()}
 }
 
 // Normaliza cualquier respuesta de Trakt a {kind,o,ep,date}
@@ -143,22 +162,23 @@ function card(n,btns,idx){
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
   const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${n.air!==undefined?`<div class="s" data-air="${idx}">${n.air?'Estreno: '+fmt(n.air):''}</div>`:''}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 let items=[];
 async function render(list,btnsFor,empty,pre){
   items=pre||list.map(norm).filter(Boolean);
-  $('#v').innerHTML=items.length?items.map((n,i)=>n.kind==='head'?`<div class="sec">${n.t}</div>`:card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
-  document.querySelectorAll('[data-p]').forEach(async el=>{
-    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=imgTag(u,el);
-  });
+  $('#v').innerHTML=items.length?items.map((n,i)=>n.kind==='head'?`<div class="sec">${n.t}</div>`:n.kind==='more'?`<div class="box"><button class="b f" data-more="${n.k}">Ver más (${n.n})</button></div>`:card(n,btnsFor(n),i)).join(''):`<div class="msg">${empty}</div>`;
+  loadPosters();
 }
-const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
+const WATCH=['seen','Visto','f'];
 const ST={hist:{shows:[],movies:[],seg:'show',q:'',found:[]},wl:{shows:[],movies:[],seg:'show',q:'',found:[]}};
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
 const cur=()=>ST[tab];
+async function watchedShows(){
+  if(WD&&Date.now()-WD.t<3e5)return WD.d;
+  const d=await tr('/sync/watched/shows?extended=full');WD={t:Date.now(),d};return d;
+}
 async function loadWL(){
   if(WL.ok)return;
   const [a,b]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies')]);
@@ -240,30 +260,64 @@ function calCard(g,i){
 }
 const wcount=x=>(x.seasons||[]).filter(q=>q.number>0).reduce((t,q)=>t+q.episodes.length,0);
 const isComplete=x=>{const a=x.show.aired_episodes;return a>0&&wcount(x)>=a};
-let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
-function drawProg(){
-  const mk=r=>({kind:'episode',o:r.show,ep:r.p.next_episode,date:null,pct:r.p.aired?Math.round(r.p.completed/r.p.aired*100):0,extra:r.p.completed?`${r.p.completed} de ${r.p.aired} episodios vistos · último: ${fmt(r.p.last_watched_at)}`:'Pendiente de empezar'});
-  const st=progData.filter(r=>r.p.completed).sort((x,y)=>(y.p.last_watched_at||'').localeCompare(x.p.last_watched_at||''));
-  const a=st.slice(0,25).map(mk),b=st.slice(25).map(mk),c=progData.filter(r=>!r.p.completed).map(mk);
-  const hd=(t,l)=>l.length?[{kind:'head',t:`${t} (${l.length})`},...l]:[];
-  return render(null,()=>[WATCH],'Estás al día con todas tus series.',[...hd('Para ver ahora',a),...hd('Llevas tiempo sin verlas',b),...hd('Sin empezar',c)]);
+const PG=new Map();
+async function progOf(id){
+  const c=PG.get(id);if(c&&Date.now()-c.t<3e5)return c.p;
+  const p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});return p;
+}
+async function fillAir(){
+  const snap=items,todo=items.map((n,i)=>[n,i]).filter(([n])=>n.kind==='episode'&&n.air==='');
+  for(let k=0;k<todo.length;k+=6){
+    await Promise.all(todo.slice(k,k+6).map(async([n,i])=>{
+      try{
+        const e=await tr(`/shows/${n.o.ids.trakt}/seasons/${n.ep.season}/episodes/${n.ep.number}?extended=full`);
+        n.air=e.first_aired||null;
+        const el=document.querySelector(`[data-air="${i}"]`);if(el&&e.first_aired)el.textContent='Estreno: '+fmt(e.first_aired);
+      }catch(err){}
+    }));
+    if(items!==snap)return;
+  }
+}
+const PS={a:{q:[],it:[],tot:0},b:{q:[],it:[],tot:0},c:{q:[],it:[],tot:0}};
+const PSEC=[['a','Para ver ahora'],['b','Tiempo sin ver'],['c','Sin empezar']];
+async function loadSec(k,n=25){
+  const S=PS[k],take=S.q.splice(0,n),res=[];
+  for(let i=0;i<take.length;i+=6)res.push(...await Promise.all(take.slice(i,i+6).map(x=>progOf(x.ids.trakt).then(p=>({show:x,p})).catch(()=>null))));
+  S.it.push(...res.filter(r=>r&&r.p.next_episode&&r.p.completed<r.p.aired));
+}
+async function drawProg(){
+  const mk=r=>({kind:'episode',o:r.show,ep:r.p.next_episode,date:null,air:r.p.next_episode.first_aired||'',pct:r.p.aired?Math.round(r.p.completed/r.p.aired*100):0,extra:r.p.completed?`${r.p.completed} de ${r.p.aired} episodios vistos · último: ${fmt(r.p.last_watched_at)}`:'Pendiente de empezar'});
+  const its=[];
+  for(const [k,t] of PSEC){
+    const S=PS[k];
+    if(!S.it.length&&!S.q.length)continue;
+    its.push({kind:'head',t:`${t} (${S.q.length?S.tot:S.it.length})`},...S.it.map(mk));
+    if(S.q.length)its.push({kind:'more',k,n:S.q.length});
+  }
+  await render(null,()=>[WATCH],'Estás al día con todas tus series.',its);
+  fillAir();
 }
 const views={
   async prog(){
-    const [w,wl]=await Promise.all([tr('/sync/watched/shows?extended=full'),tr('/sync/watchlist/shows').catch(()=>[])]);
+    const my=navId;
+    const [w,wl]=await Promise.all([watchedShows(),tr('/sync/watchlist/shows').catch(()=>[])]);
+    if(my!==navId)return;
     w.sort((a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||''));
     const seen=new Set(w.map(x=>x.show.ids.trakt));
-    const todo=w.filter(x=>!isComplete(x)).map(x=>x.show).concat(wl.map(x=>x.show).filter(x=>!seen.has(x.ids.trakt)));
-    const res=[];
-    for(let i=0;i<todo.length;i+=8){
-      res.push(...await Promise.all(todo.slice(i,i+8).map(x=>tr(progPath(x.ids.trakt)).then(p=>({show:x,p})).catch(()=>null))));
-    }
-    progData=res.filter(r=>r&&r.p.next_episode);
+    const st=w.filter(x=>!isComplete(x)).map(x=>x.show);
+    const un=wl.filter(x=>!seen.has(x.show.ids.trakt)).sort((a,b)=>(b.listed_at||'').localeCompare(a.listed_at||'')).map(x=>x.show);
+    PS.a={q:st.slice(0,25),it:[],tot:Math.min(25,st.length)};
+    PS.b={q:st.slice(25),it:[],tot:Math.max(0,st.length-25)};
+    PS.c={q:un,it:[],tot:un.length};
+    await loadSec('a');
+    if(my!==navId)return;
     await drawProg();
   },
   async hist(){
-    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=full'),tr('/sync/watched/movies'),loadWL().catch(()=>{})]);
+    const my=navId;
+    const [sh,mv]=await Promise.all([watchedShows(),tr('/sync/watched/movies'),loadWL().catch(()=>{})]);
+    if(my!==navId)return;
     const by=(a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||'');
     sh.sort(by);mv.sort(by);
     const done=sh.filter(isComplete);
@@ -275,7 +329,9 @@ const views={
     listShell('Buscar en tus vistos o en Trakt');
   },
   async wl(){
+    const my=navId;
     const [a,b]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies')]);
+    if(my!==navId)return;
     const by=(x,y)=>(y.listed_at||'').localeCompare(x.listed_at||'');
     a.sort(by);b.sort(by);
     WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
@@ -287,7 +343,9 @@ const views={
   },
   async cal(){
     const d0=new Date().toISOString().slice(0,10);
+    const my=navId;
     const d=await tr(`/calendars/my/shows/${d0}/30`);
+    if(my!==navId)return;
     const g={},out=[];
     d.map(norm).filter(Boolean).forEach(n=>{
       const k=n.o.ids.trakt;
@@ -301,7 +359,9 @@ const views={
     loadPosters();
   },
   async disc(){
+    const my=navId;
     await loadWL().catch(()=>{});
+    if(my!==navId)return;
     $('#v').innerHTML=`<div class="box"><div class="seg"><button data-ds="t" class="on">Tendencias</button><button data-ds="n">Estrenos del mes</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter')search(e.target.value)});
     await trending();
@@ -309,7 +369,6 @@ const views={
 };
 async function trending(){
   const [m,s]=await Promise.all([tr('/movies/trending?limit=10'),tr('/shows/trending?limit=10')]);
-  const box=document.createElement('div');
   await renderInto([...m,...s],'Tendencias');
 }
 async function premieres(){
@@ -325,23 +384,24 @@ async function search(q){
   await renderInto(d,'Sin resultados.');
 }
 async function renderInto(list,label,pre){
+  if(!$('#r'))return;
   items=pre||list.map(norm).filter(Boolean);
   const html=items.map((n,i)=>card(n,[FOLLOW(n)],i)).join('');
   $('#r').innerHTML=items.length?html:`<div class="msg">${label}</div>`;
-  document.querySelectorAll('#r [data-p]').forEach(async el=>{
-    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=imgTag(u,el);
-  });
+  loadPosters();
 }
 
 const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
+async function fillPoster(el){
+  const [k,id]=el.dataset.p.split(':'),u=await poster(k,id);
+  if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
+}
+const pio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){pio.unobserve(e.target);fillPoster(e.target)}}),{rootMargin:'300px'}):null;
 function loadPosters(){
-  document.querySelectorAll('[data-p]').forEach(async el=>{
-    const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
-    if(u)el.outerHTML=imgTag(u,el);
-  });
+  document.querySelectorAll('[data-p]:not([data-w])').forEach(el=>{el.dataset.w=1;pio?pio.observe(el):fillPoster(el)});
 }
 async function openDetail(n){
+  navId++;const my=navId;
   const o=n.o,isM=n.kind==='movie',base=(isM?'/movies/':'/shows/')+o.ids.trakt,kd=isM?'movie':'tv';
   $('#h').textContent=o.title;
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
@@ -354,6 +414,7 @@ async function openDetail(n){
       tmdbInfo(kd,o.ids.tmdb),
       loadWL().catch(()=>{})
     ]);
+    if(my!==navId)return;
     const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
     const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.status,d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
     const fol=(isM?WL.m:WL.s).has(o.ids.trakt);
@@ -391,6 +452,12 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  const mo=e.target.closest('[data-more]');
+  if(mo){
+    const my=navId;mo.disabled=true;mo.textContent='Cargando…';
+    try{await loadSec(mo.dataset.more);if(my===navId)await drawProg()}catch(err){toast(err.message);mo.disabled=false;mo.textContent='Ver más'}
+    return;
+  }
   const op=e.target.closest('[data-o]');
   if(op)return openDetail(items[+op.dataset.o]);
   const un=e.target.closest('[data-u]');
@@ -442,13 +509,13 @@ document.addEventListener('click',async e=>{
       toast('Marcado como visto',async()=>{try{await tr('/sync/history/remove',{body:hb});toast('Deshecho');go(tab)}catch(err){toast(err.message)}});
       if(tab==='wl'||tab==='cal'||tab==='hist')go(tab);
       else if(tab==='prog'){
-        const r=progData.find(r=>r.show.ids.trakt===n.o.ids.trakt);
-        try{r.p=await tr(progPath(n.o.ids.trakt));progData=progData.filter(r=>r.p.next_episode);drawProg()}catch(e){go('prog')}
+        const id=n.o.ids.trakt;
+        try{
+          const p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});
+          for(const k in PS){const S=PS[k],i=S.it.findIndex(r=>r.show.ids.trakt===id);if(i>=0){if(p.next_episode&&p.completed<p.aired)S.it[i].p=p;else S.it.splice(i,1)}}
+          drawProg();
+        }catch(e){go('prog')}
       }
-    }else{
-      const wb=n.kind==='movie'?{movies:[ids]}:{shows:[ids]};
-      await tr('/sync/watchlist',{body:wb});
-      toast(n.kind==='movie'?'Añadido a pendientes':'Añadido: aparece en Siguiente',async()=>{try{await tr('/sync/watchlist/remove',{body:wb});toast('Quitado')}catch(err){toast(err.message)}});
     }
   }catch(err){toast(err.message);b.disabled=false}
 });
@@ -528,12 +595,12 @@ const TABS=[['prog','Siguiente','📺'],['hist','Visto','🕘'],['wl','Pendiente
 function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span class="ic">${t[2]}</span>${t[1]}</button>`).join('')}
 $('#nav').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)go(t.dataset.t)});
 async function go(t){
-  tab=t;setNav();
+  tab=t;navId++;const my=navId;setNav();
   $('#h').textContent=TABS.find(x=>x[0]===t)[1];
   if(t==='cfg')return cfgView();
   if(!tok){toast('Conecta primero tu cuenta de Trakt');tab='cfg';setNav();return cfgView()}
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
-  try{await views[t]()}catch(err){if(err.auth){tab='cfg';setNav();$('#h').textContent='Ajustes';cfgView();toast(err.message)}else $('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
+  try{await views[t]()}catch(err){if(my!==navId)return;if(err.auth){tab='cfg';setNav();$('#h').textContent='Ajustes';cfgView();toast(err.message)}else{$('#v').innerHTML=`<div class="msg">${esc(err.message)}<br><button class="b f" id="retry">Reintentar</button></div>`;$('#retry').onclick=()=>go(t)}}
 }
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 try{localStorage.removeItem('prov');localStorage.removeItem('lk')}catch(e){}
