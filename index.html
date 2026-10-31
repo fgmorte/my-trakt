@@ -15,7 +15,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",
 h1{font:700 26px Georgia,serif;margin:0;padding:18px 16px 8px}
 main{max-width:640px;margin:0 auto}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
-nav button{flex:1;border:0;background:none;color:var(--mu);padding:8px 0 8px;font:inherit;font-size:10.5px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button{flex:1;border:0;background:none;color:var(--mu);padding:8px 0 8px;font:inherit;font-size:10px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav .ic{display:block;line-height:0;color:var(--mu)}
 nav .ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav button.on{color:var(--tx);font-weight:700}
@@ -43,7 +43,10 @@ a{color:var(--tx);text-decoration:underline var(--ac)}
 #toast.on{opacity:1}
 #toast button{color:var(--ac)!important}
 [data-o]{cursor:pointer}
-details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700}
+details{border-bottom:1px solid var(--ln);padding:8px 16px}summary{padding:8px 0;font-weight:700;display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer}
+summary::-webkit-details-marker{display:none}
+.sn::before{content:"▸ ";color:var(--mu)}
+details[open] .sn::before{content:"▾ "}
 [hidden]{display:none!important}
 input[type=checkbox]{width:auto;margin:0 10px 0 0}
 .chkrow{display:flex;align-items:center;padding:6px 0;color:var(--tx);font-size:15px}
@@ -69,6 +72,9 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 .zoom{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:80;display:flex;align-items:center;justify-content:center}
 .zoom img{max-width:94%;max-height:90%;border-radius:10px}
 img[data-z]{cursor:zoom-in}
+.it .b{margin:4px 4px 0 0;padding:1px 8px;font-size:11px}
+.it .b.f{background:rgba(255,107,154,.14);color:var(--ac);border-color:var(--ac)}
+.desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
 [data-ep],[data-tm]{cursor:pointer}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
 .pick{background:var(--card);border-radius:14px;padding:16px;width:min(86%,340px);display:flex;flex-direction:column;gap:8px;max-height:80%;overflow:auto}
@@ -136,21 +142,25 @@ async function tr(path,opt={}){
   if(!r.ok){const er=new Error('Trakt respondió '+r.status);er.status=r.status;throw er}
   return r.json();
 }
-async function poster(kind,tmdb){
-  if(!cfg.tmdb||!tmdb)return '';
+const TMX=ls.get('tmx')||{};
+async function tmMeta(kind,tmdb){
+  const none={p:'',o:'',r:0};
+  if(!cfg.tmdb||!tmdb)return none;
   const k=kind+tmdb;
-  if(posters[k]!==undefined)return posters[k];
+  if(TMX[k])return TMX[k];
   await slot();
   try{
-    const r=await fetch(`https://api.themoviedb.org/3/${kind==='movie'?'movie':'tv'}/${tmdb}?api_key=${encodeURIComponent(cfg.tmdb)}`);
-    if(!r.ok)return '';
-    const d=await r.json();
-    posters[k]=d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'';
-    clearTimeout(poster.t);poster.t=setTimeout(()=>ls.set('posters',posters),600);
-    return posters[k];
-  }catch(e){return ''}
+    const g=async lang=>{const r=await fetch(`https://api.themoviedb.org/3/${kind==='movie'?'movie':'tv'}/${tmdb}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${lang}`);return r.ok?r.json():null};
+    const d=await g('es-ES');
+    if(!d)return none;
+    if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
+    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0};
+    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx',TMX),600);
+    return TMX[k];
+  }catch(e){return none}
   finally{freeSlot()}
 }
+async function poster(kind,tmdb){return (await tmMeta(kind,tmdb)).p}
 
 // Normaliza cualquier respuesta de Trakt a {kind,o,ep,date}
 function norm(x){
@@ -196,8 +206,9 @@ async function progOf(id){
 }
 const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
 async function fillPoster(el){
-  const [k,id]=el.dataset.p.split(':'),u=await poster(k,id);
-  if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
+  const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),m=await tmMeta(k,id);
+  const d=it&&it.querySelector('.desc');if(d&&m.o)d.textContent=m.o;
+  if(m.p&&el.isConnected)el.outerHTML=imgTag(m.p,el);
 }
 const pio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){pio.unobserve(e.target);fillPoster(e.target)}}),{rootMargin:'300px'}):null;
 function loadPosters(){
@@ -205,7 +216,8 @@ function loadPosters(){
 }
 /* ===== Estado y utilidades ===== */
 const WATCH=['seen','Visto','f'];
-const PROG_BTNS=[WATCH,['play','▶ Ver']];
+const PLAY=['play','▶ Ver','',1];
+const PROG_BTNS=[WATCH,PLAY];
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
 const LS2={hist:{shows:[],movies:[],seg:'show',q:''},wl:{shows:[],movies:[],seg:'show',q:''}};
@@ -213,13 +225,33 @@ const CAL={seg:'e'};
 let detailOpen=false,dpush=0,lastBack=0;
 const ENDED=x=>/ended|canceled/i.test((x.show&&x.show.status)||'');
 const byDesc=k=>(a,b)=>(b[k]||'').localeCompare(a[k]||'');
+async function trAll(path,lim=100){
+  const out=[],seen=new Set();
+  for(let p=1;p<=40;p++){
+    const j=await tr(`${path}${path.includes('?')?'&':'?'}page=${p}&limit=${lim}`);
+    if(!Array.isArray(j)||!j.length)break;
+    let add=0;
+    for(const x of j){const k=JSON.stringify((x.show||x.movie||x).ids);if(!seen.has(k)){seen.add(k);out.push(x);add++}}
+    if(!add||j.length<lim)break;
+  }
+  return out;
+}
+const CD=ls.get('cdone')||{};
+async function verifyDone(sl){
+  const need=sl.filter(n=>n.chk&&!(CD[n.o.ids.trakt]&&Date.now()-CD[n.o.ids.trakt].t<6048e5));
+  for(let i=0;i<need.length;i+=5)await Promise.all(need.slice(i,i+5).map(async n=>{
+    try{const p=await progOf(n.o.ids.trakt);CD[n.o.ids.trakt]={c:p.aired>0&&p.completed>=p.aired?1:0,t:Date.now()}}catch(e){}
+  }));
+  if(need.length)ls.set('cdone',CD);
+  return sl.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c));
+}
 async function watchedMovies(){
   if(WM&&Date.now()-WM.t<3e5)return WM.d;
-  const d=await tr('/sync/watched/movies');WM={t:Date.now(),d};return d;
+  const d=await trAll('/sync/watched/movies');WM={t:Date.now(),d};return d;
 }
 async function watchedShows(){
   if(WD&&Date.now()-WD.t<3e5)return WD.d;
-  const d=await tr('/sync/watched/shows?extended=full');WD={t:Date.now(),d};return d;
+  const d=await trAll('/sync/watched/shows?extended=full',50);WD={t:Date.now(),d};return d;
 }
 function setSeen(w,wm){
   SEEN.s=new Set(w.map(x=>x.show.ids.trakt));
@@ -229,7 +261,7 @@ function setSeen(w,wm){
 async function loadSeen(){const [w,wm]=await Promise.all([watchedShows(),watchedMovies()]);setSeen(w,wm)}
 async function loadWL(){
   if(WL.ok)return;
-  const [a,b]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies')]);
+  const [a,b]=await Promise.all([trAll('/sync/watchlist/shows'),trAll('/sync/watchlist/movies')]);
   WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
 }
 const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
@@ -250,8 +282,8 @@ function card(n,btns,idx){
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
   const pl=n.pl?`<div class="plat" data-pl="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}:${idx}"></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
-  const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it" data-ci="${idx}"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${pl}${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
+  return `<div class="it" data-ci="${idx}"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div>${pl}${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 
 /* ===== Plataformas (etiqueta en Próximos) ===== */
@@ -285,10 +317,14 @@ async function platNames(kind,tmdb,fallback){
   clearTimeout(platNames.t);platNames.t=setTimeout(()=>ls.set('prov',PV),600);
   return names;
 }
+const isMine=nm=>{const x=normN(nm);return (cfg.plats||[]).map(normN).some(m=>m&&(x.includes(m)||m.includes(x)))};
 async function fillPlat(el){
   const [kind,tmdb,idx]=el.dataset.pl.split(':'),n=items[+idx];
   const names=tmdb?await platNames(kind,tmdb,n&&n.o&&n.o.network):[];
-  if(el.isConnected)el.textContent=names.length?'📺 '+names.join(' · '):'📺 Plataforma por confirmar';
+  if(!el.isConnected)return;
+  el.textContent=names.length?'📺 '+names.join(' · '):'📺 Plataforma por confirmar';
+  const pb=el.parentElement&&el.parentElement.querySelector('[data-a="play"]');
+  if(pb)pb.hidden=!names.some(isMine);
 }
 const plio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){plio.unobserve(e.target);fillPlat(e.target)}}),{rootMargin:'200px'}):null;
 function observePl(){document.querySelectorAll('[data-pl]:not([data-ob])').forEach(el=>{el.dataset.ob=1;plio?plio.observe(el):fillPlat(el)})}
@@ -312,7 +348,7 @@ function startFeed(root,src,o){
     fl.insertAdjacentHTML('beforeend',its.map(n=>{items.push(n);const i=items.length-1;return o.html?o.html(n,i):card(n,o.btns(n),i)}).join(''));
     loadPosters();observePl();if(o.after)o.after();
     busy=false;
-    if(pos>=src.length){fs.textContent=items.length?'':(o.empty||'No hay nada que mostrar.');feedIO.disconnect()}
+    if(pos>=src.length){fs.textContent=items.length?'':(o.empty||'No hay nada que mostrar.');feedIO.disconnect();if(o.done)o.done()}
     else{fs.textContent='';feedIO.unobserve(fs);feedIO.observe(fs)}
   }
   feedIO=new IntersectionObserver(es=>{if(es[0].isIntersecting)more()},{rootMargin:'500px'});
@@ -320,7 +356,7 @@ function startFeed(root,src,o){
 }
 
 /* ===== Siguiente ===== */
-const mkProg=(show,p)=>({kind:'episode',o:show,ep:p.next_episode,date:null,air:p.next_episode.first_aired||'',pct:p.aired?Math.round(p.completed/p.aired*100):0,extra:p.completed?`${p.completed} de ${p.aired} episodios vistos · último: ${fmt(p.last_watched_at)}`:'Pendiente de empezar'});
+const mkProg=(show,p)=>({kind:'episode',o:show,ep:p.next_episode,date:null,pl:true,air:p.next_episode.first_aired||'',pct:p.aired?Math.round(p.completed/p.aired*100):0,extra:p.completed?`${p.completed} de ${p.aired} episodios vistos · último: ${fmt(p.last_watched_at)}`:'Pendiente de empezar'});
 async function progBatch(sl){
   const res=[];
   for(let i=0;i<sl.length;i+=5)res.push(...await Promise.all(sl.slice(i,i+5).map(x=>progOf(x.show.ids.trakt).then(p=>({show:x.show,p})).catch(()=>null))));
@@ -343,29 +379,29 @@ async function fillAir(){
 async function refreshProg(i){
   const n=items[i];
   if(!n||tab!=='prog')return go('prog');
-  const id=n.o.ids.trakt,p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});
+  const id=n.o.ids.trakt,p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});delete CD[id];
   const el=document.querySelector(`.it[data-ci="${i}"]`);
   if(p.next_episode&&p.completed<p.aired){
     const nn=mkProg(n.o,p);items[i]=nn;
-    if(el){el.outerHTML=card(nn,PROG_BTNS,i);loadPosters();fillAir()}else go('prog');
+    if(el){el.outerHTML=card(nn,PROG_BTNS,i);loadPosters();observePl();fillAir()}else go('prog');
   }else if(el)el.remove();
 }
 
 /* ===== Listas Pendientes / Vistos ===== */
 function listBtns(mode,n){
   if(mode==='hist')return n.kind==='movie'?[seenBtn(n)]:[];
-  if(n.kind==='movie')return [seenBtn(n),FOLLOW(n)];
-  return n.noFollow?[]:[FOLLOW(n)];
+  if(n.kind==='movie')return [seenBtn(n),FOLLOW(n),PLAY];
+  return n.noFollow?[PLAY]:[FOLLOW(n),PLAY];
 }
 function paintList(mode){
   const S=LS2[mode],q=S.q.trim().toLowerCase();
   const src=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
   document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===S.seg));
-  startFeed($('#hl'),src,{size:12,prep:async a=>a,btns:n=>listBtns(mode,n),after:observePl,empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
+  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),after:observePl,done:()=>{if(mode==='hist'&&S.seg==='show'&&!q){const b=document.querySelector('[data-sg="show"]');if(b)b.textContent='Series ('+items.length+')'}},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
 }
 function listShell(mode){
   const S=LS2[mode];
-  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">Series (${S.shows.length})</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tu lista o en Trakt" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
+  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">${mode==='hist'?'Series':'Series ('+S.shows.length+')'}</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tu lista o en Trakt" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
   $('#hq').addEventListener('input',e=>{S.q=e.target.value;paintList(mode)});
   $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchList(mode,e.target.value)});
   paintList(mode);
@@ -414,8 +450,8 @@ async function estrenos(box){
 }
 async function cinema(box){
   const cs=cfg.cities||[];
-  const links=cs.map(c=>`<a class="b f" href="https://www.google.com/search?q=${encodeURIComponent('cartelera cines '+c)}" target="_blank" rel="noopener">🎟️ ${esc(c)}</a>`).join('');
-  box.innerHTML=`<div class="box"><div class="sub">Cartelera por cines</div><div class="s" style="margin:4px 0 4px">${cs.length?'Pulsa tu ciudad para ver cada cine con sus horarios de hoy:':'Elige tus ciudades en Ajustes para ver aquí su cartelera.'}</div>${links}<div class="s" style="margin-top:8px">Los horarios por cine se abren en Google. Debajo, las películas en cartel en España.</div></div><div id="cf"></div>`;
+  const links=cs.map(c=>`<a class="b f" href="https://www.google.com/search?q=${encodeURIComponent('horarios de salas de cine en '+c)}" target="_blank" rel="noopener">🎟️ ${esc(c)}</a>`).join('');
+  box.innerHTML=`<div class="box"><div class="sub">Cartelera por cines</div><div class="s" style="margin:4px 0 4px">${cs.length?'Pulsa tu ciudad para ver las salas de cine con sus películas y horarios:':'Elige tus ciudades en Ajustes para ver aquí su cartelera.'}</div>${links}<div class="s" style="margin-top:8px">Los horarios por cine se abren en Google. Debajo, las películas en cartel en España.</div></div><div id="cf"></div>`;
   if(!cfg.tmdb)return;
   const pages=[1,2,3,4,5].map(p=>({k:'now',p})).concat([1,2,3].map(p=>({k:'up',p})));
   startFeed($('#cf'),pages,{size:1,empty:'No se pudo cargar la cartelera.',html:tmCard,
@@ -457,7 +493,7 @@ const views={
   },
   async wl(){
     const my=navId;
-    const [a,b,w,wm]=await Promise.all([tr('/sync/watchlist/shows'),tr('/sync/watchlist/movies'),watchedShows(),watchedMovies()]);
+    const [a,b,w,wm]=await Promise.all([trAll('/sync/watchlist/shows'),trAll('/sync/watchlist/movies'),watchedShows(),watchedMovies()]);
     if(my!==navId)return;
     setSeen(w,wm);WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
     const wmap=new Map(w.map(x=>[x.show.ids.trakt,x])),rows=[];
@@ -469,7 +505,7 @@ const views={
     w.forEach(x=>{if(isComplete(x)&&!ENDED(x)&&!WL.s.has(x.show.ids.trakt))rows.push({kind:'show',o:x.show,ts:x.last_watched_at,date:x.last_watched_at,noFollow:true,pl:true,extra:'Esperando nueva temporada · último: '+fmt(x.last_watched_at)})});
     const S=LS2.wl;
     S.shows=rows.sort(byDesc('ts'));
-    S.movies=b.map(x=>({kind:'movie',o:x.movie,ts:x.listed_at,date:x.listed_at,extra:'Añadida el '+fmt(x.listed_at)})).sort(byDesc('ts'));
+    S.movies=b.map(x=>({kind:'movie',o:x.movie,ts:x.listed_at,date:x.listed_at,pl:true,extra:'Añadida el '+fmt(x.listed_at)})).sort(byDesc('ts'));
     listShell('wl');
   },
   async cal(){
@@ -489,7 +525,7 @@ const views={
     if(my!==navId)return;
     setSeen(w,wm);
     const S=LS2.hist;
-    S.shows=w.filter(isComplete).sort(byDesc('last_watched_at')).map(x=>({kind:'show',o:x.show,date:x.last_watched_at,sub:`Completa · ${x.show.aired_episodes} episodios`,extra:(ENDED(x)?'Finalizada':'Al día · en emisión')+' · último: '+fmt(x.last_watched_at)}));
+    S.shows=w.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'show',o:x.show,date:x.last_watched_at,chk:!isComplete(x),sub:'Serie completa',extra:(ENDED(x)?'Finalizada':'Al día · en emisión')+' · último: '+fmt(x.last_watched_at)}));
     S.movies=wm.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
     listShell('hist');
   }
@@ -621,8 +657,9 @@ async function openDetail(n){
         const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date(),k=s.number+':'+x.number;
         return `<div class="it" style="padding:8px 0"><div><span class="t" data-ep="${k}">E${x.number} · ${esc(x.title||'')}</span><div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir">▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
       }).join('');
-      const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
-      return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
+      const aired=(s.episodes||[]).filter(x=>!(x.first_aired&&new Date(x.first_aired)>new Date()));
+      const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length,allw=aired.length>0&&aired.every(x=>done[s.number+'-'+x.number]);
+      return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
     <div class="it"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
@@ -682,13 +719,29 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-ds]'))){document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===x));discRun(x.dataset.ds);return}
   if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
   if(T.closest('#bk')){paintList(tab);return}
+  if((x=T.closest('[data-sv]'))){
+    e.preventDefault();
+    const det=x.closest('details'),un=[...det.querySelectorAll('[data-e]')],wa=[...det.querySelectorAll('[data-u]')];
+    const mark=un.length>0,list=mark?un:wa;
+    if(!list.length)return;
+    x.disabled=true;
+    try{
+      await tr(mark?'/sync/history':'/sync/history/remove',{body:{episodes:list.map(b=>({ids:{trakt:+(b.dataset.e||b.dataset.u)}}))}});
+      list.forEach(b=>{const id=b.dataset.e||b.dataset.u;b.outerHTML=mark?`<button class="b f" data-u="${id}">✓ Visto</button>`:`<button class="b" data-e="${id}">Visto</button>`});
+      const sc=det.querySelector('.sc');if(sc)sc.textContent=det.querySelectorAll('[data-u]').length;
+      x.textContent=mark?'✓ Visto':'Visto';x.classList.toggle('f',mark);
+      if(window._d)delete CD[window._d.n.o.ids.trakt];
+      toast(mark?'Temporada marcada como vista':'Temporada desmarcada');
+    }catch(err){toast(err.message)}
+    x.disabled=false;return;
+  }
   if((x=T.closest('[data-pp]'))){const [id,sn,en]=x.dataset.pp.split(':'),sh=window._d.n.o;playTitle({paths:['/episodes/'+id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${sn}E${en}`});return}
   if((x=T.closest('[data-ep]'))){const [sn,en]=x.dataset.ep.split(':').map(Number);openEpisode(window._d.n.o,sn,en);return}
   if(T.closest('[data-play]')){playTitle(tgtFor(window._d.n));return}
   if(T.closest('[data-play2]')){const E=window._ep,sh=E.show;playTitle({paths:['/episodes/'+E.id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${E.sn}E${E.en}`});return}
   if((x=T.closest('[data-ev]'))){
     const E=window._ep,on=E.seen;x.disabled=true;
-    try{await tr(on?'/sync/history/remove':'/sync/history',{body:{episodes:[{ids:{trakt:E.id}}]}});E.seen=!on;x.textContent=on?'Visto':'✓ Visto';x.classList.toggle('f',!on);toast(on?'Desmarcado':'Marcado como visto')}
+    try{await tr(on?'/sync/history/remove':'/sync/history',{body:{episodes:[{ids:{trakt:E.id}}]}});E.seen=!on;delete CD[E.show.ids.trakt];x.textContent=on?'Visto':'✓ Visto';x.classList.toggle('f',!on);toast(on?'Desmarcado':'Marcado como visto')}
     catch(err){toast(err.message)}
     x.disabled=false;return;
   }
@@ -701,13 +754,13 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-o]'))){const n=items[+x.dataset.o];if(n)openDetail(n);return}
   if((x=T.closest('[data-u]'))){
     x.disabled=true;
-    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;toast('Visto deshecho')}
+    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Visto deshecho')}
     catch(err){toast(err.message);x.disabled=false}
     return;
   }
   if((x=T.closest('[data-e]'))){
     x.disabled=true;
-    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+x.dataset.e}}]}});x.outerHTML=`<button class="b f" data-u="${x.dataset.e}">✓ Visto</button>`;toast('Marcado como visto')}
+    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+x.dataset.e}}]}});x.outerHTML=`<button class="b f" data-u="${x.dataset.e}">✓ Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Marcado como visto')}
     catch(err){toast(err.message);x.disabled=false}
     return;
   }
@@ -753,7 +806,7 @@ function cfgView(){
   <label>Mis ciudades (cartelera)</label><div class="pgrid cgrid">${platsHtml(CIUDADES,'cities')}</div>
   <label>Mis plataformas de pago</label><div class="pgrid">${platsHtml(PAGO,'plats')}</div>
   <label>Plataformas gratuitas</label><div class="pgrid">${platsHtml(GRATIS,'plats')}</div>
-  <p class="s">Se guardan solo en este dispositivo. Si el botón ▶ encuentra una de tus plataformas, la abre directamente.</p>
+  <p class="s">Se guardan solo en este dispositivo. El botón ▶ solo aparece en En Progreso si el título está en una de tus plataformas.</p>
   <button class="b" id="sv">Guardar ajustes</button><button class="b f" id="con">${tok?'Reconectar con Trakt':'Conectar con Trakt'}</button>
   ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
   <div style="margin-top:14px"><button class="b" id="inst">📲 Instalar en el móvil</button><div class="s" id="instmsg" style="margin-top:6px"></div></div><div id="dv"></div></div>`;
