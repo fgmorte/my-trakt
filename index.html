@@ -13,7 +13,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 "Trebuchet MS",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom))}
 h1{font:700 26px Georgia,serif;margin:0;padding:18px 16px 8px}
-main{max-width:640px;margin:0 auto}
+main{max-width:640px;margin:0 auto;touch-action:pan-y}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;border:0;background:none;color:var(--mu);padding:8px 0 8px;font:inherit;font-size:10px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav .ic{display:block;line-height:0;color:var(--mu)}
@@ -891,6 +891,41 @@ async function go(t){
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
   try{await views[t]()}catch(err){if(my!==navId)return;fail(err,$('#v'))}
 }
+/* Deslizar a izquierda/derecha para cambiar de sección (como Instagram) */
+(function(){
+  const main=document.querySelector('main');
+  let sx=0,sy=0,dx=0,dy=0,dir=0,on=false;
+  const reset=()=>{main.style.transition='transform .2s ease-out,opacity .2s';main.style.transform='';main.style.opacity=''};
+  addEventListener('touchstart',e=>{
+    on=false;
+    if(e.touches.length!==1||document.querySelector('.zoom,#intro'))return;
+    const p=e.touches[0];
+    if(p.clientX<24||p.clientX>innerWidth-24||e.target.closest('input,textarea,select'))return;
+    sx=p.clientX;sy=p.clientY;dx=dy=0;dir=0;on=true;
+  },{passive:true});
+  addEventListener('touchmove',e=>{
+    if(!on)return;
+    const p=e.touches[0];dx=p.clientX-sx;dy=p.clientY-sy;
+    if(!dir&&(Math.abs(dx)>10||Math.abs(dy)>10))dir=Math.abs(dx)>Math.abs(dy)*1.5?1:-1;
+    if(dir===1){main.style.transition='none';main.style.transform=`translateX(${dx*0.5}px)`;main.style.opacity=String(1-Math.min(Math.abs(dx),300)/700)}
+  },{passive:true});
+  addEventListener('touchcancel',()=>{if(on&&dir===1)reset();on=false},{passive:true});
+  addEventListener('touchend',()=>{
+    if(!on)return;on=false;
+    if(dir!==1||Math.abs(dx)<70){if(dir===1)reset();return}
+    if(detailOpen){reset();if(dx>0)history.back();return}
+    const i=TABS.findIndex(x=>x[0]===tab),j=i+(dx<0?1:-1);
+    if(j<0||j>=TABS.length){reset();return}
+    const left=dx<0;
+    main.style.transition='transform .15s ease-in,opacity .15s';
+    main.style.transform=`translateX(${left?'-60%':'60%'})`;main.style.opacity='0';
+    setTimeout(()=>{
+      go(TABS[j][0]);
+      main.style.transition='none';main.style.transform=`translateX(${left?'60%':'-60%'})`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{main.style.transition='transform .2s ease-out,opacity .2s';main.style.transform='';main.style.opacity=''}));
+    },150);
+  },{passive:true});
+})();
 /* Atrás: una vez cierra la ficha; dos veces seguidas sale de la app */
 history.replaceState({root:1},'');history.pushState({app:1},'');
 addEventListener('popstate',e=>{
