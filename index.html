@@ -51,32 +51,12 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 .pp img,.pp .av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--card);flex:none}
 .pp div{flex:1;min-width:0}.pp b{display:block}.pp span{color:var(--mu);font-size:13px}
 .kv{padding:8px 0;border-bottom:1px solid var(--ln)}.kv span{display:block;color:var(--mu);font-size:12px}
-#intro{position:fixed;inset:0;z-index:99;background:#0b0710;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;overflow:hidden;transition:opacity .5s}
-#intro.out{opacity:0;pointer-events:none}
-#intro>*{position:relative;z-index:2}
-#intro .scan{position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.35) 0 1px,transparent 1px 3px)}
-#intro .sign{font:700 14px "Trebuchet MS",sans-serif;letter-spacing:5px;color:#ff6b9a;border:2px solid #ff6b9a;padding:6px 14px;border-radius:6px;box-shadow:0 0 12px #ff2e7e,inset 0 0 10px #ff2e7e;text-shadow:0 0 8px #ff2e7e;animation:blink .8s steps(2) 3}
-#intro .sun{position:absolute;z-index:1;width:220px;height:220px;border-radius:50%;bottom:30%;background:linear-gradient(#ffb3cd,#ff3d81 55%,#9c0f4f);-webkit-mask-image:repeating-linear-gradient(#000 0 14px,transparent 14px 19px);mask-image:repeating-linear-gradient(#000 0 14px,transparent 14px 19px);animation:rise 1.1s ease-out both}
-#intro .grid{position:absolute;z-index:1;left:-60%;right:-60%;bottom:0;height:38%;background:repeating-linear-gradient(90deg,rgba(255,107,154,.75) 0 2px,transparent 2px 56px),repeating-linear-gradient(0deg,rgba(255,107,154,.75) 0 2px,transparent 2px 36px);transform:perspective(260px) rotateX(62deg);transform-origin:bottom;animation:gridm .6s linear infinite}
-#intro .ttl{font:900 46px Impact,"Arial Black",sans-serif;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #ff6b9a,0 0 18px #ff2e7e,0 0 40px #ff2e7e;animation:flick 1.6s both}
-#intro .sub2{font:700 12px "Trebuchet MS",sans-serif;letter-spacing:3px;color:#efebf5;animation:fadei .6s .6s both}
-#intro .play{font:700 18px "Trebuchet MS",sans-serif;color:#16131d;background:#ff6b9a;padding:6px 18px;border-radius:4px;box-shadow:0 0 16px #ff2e7e;animation:fadei .3s 1s both,blink .6s steps(2) 1.3s 2}
-@keyframes gridm{to{background-position:0 0,0 36px}}
-@keyframes flick{0%{opacity:0}10%{opacity:1}14%{opacity:.2}18%{opacity:1}22%{opacity:.4}26%,100%{opacity:1}}
-@keyframes blink{50%{opacity:.25}}
-@keyframes fadei{from{opacity:0}to{opacity:1}}
-@keyframes rise{from{transform:translateY(70px);opacity:0}to{transform:none;opacity:1}}
-@media (prefers-reduced-motion:reduce){#intro{display:none}}
-.zoom{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:80;display:flex;align-items:center;justify-content:center}
-.zoom img{max-width:94%;max-height:90%;border-radius:10px}
-img[data-z]{cursor:zoom-in}
 .seg{display:flex;background:var(--card);border-radius:99px;padding:3px;margin-bottom:10px}
 .seg button{flex:1;border:0;background:none;color:var(--mu);padding:8px;border-radius:99px;font:inherit;font-weight:700}
 .seg button.on{background:var(--ac);color:var(--on)}
 </style>
 </head>
 <body>
-<div id="intro" aria-hidden="true"><div class="scan"></div><div class="sign">★ VIDEOCLUB ★</div><div class="sun"></div><div class="grid"></div><div class="ttl">MI TRAKT</div><div class="sub2">SERIES · PELÍCULAS · SESIÓN CONTINUA</div><div class="play">▶ PLAY</div></div>
 <main><h1 id="h">Mi Trakt</h1><div id="v"></div></main>
 <nav id="nav"></nav>
 <div id="toast"></div>
@@ -85,7 +65,7 @@ const $=s=>document.querySelector(s);
 const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
 const DEFAULT_TMDB='1ecd17043eeaf60425225d378af33c0a';
-let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
+let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB,country:((navigator.language||'es-ES').split('-')[1]||'ES').toUpperCase()},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
 if(!cfg.cid)cfg.cid=DEFAULT_CID;
 if(!cfg.tmdb)cfg.tmdb=DEFAULT_TMDB;
 const posters=ls.get('posters')||{};
@@ -134,7 +114,7 @@ function card(n,btns,idx){
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
   const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}">${b[1]}</button>`).join('');
-  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  return `<div class="it"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${bar}<div class="s">${n.extra||fmt(n.date)}</div>${(cfg.subs||[]).length&&o.ids.tmdb?`<div class="plat" data-pl="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb}:${idx}"></div>`:''}${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 let items=[];
 async function render(list,btnsFor,empty,pre){
@@ -147,7 +127,7 @@ async function render(list,btnsFor,empty,pre){
 }
 const WATCH=['seen','Visto','f'], LATER=['later','+ Pendiente'];
 const ST={hist:{shows:[],movies:[],seg:'show',q:'',found:[]},wl:{shows:[],movies:[],seg:'show',q:'',found:[]}};
-const SEEN={s:new Set(),c:new Set(),m:new Set()};
+const SEEN={s:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
 const cur=()=>ST[tab];
 async function loadWL(){
@@ -188,13 +168,50 @@ async function searchList(q){
     const d=await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=10`);
     S.found=d.map(norm).filter(Boolean).map(n=>{
       const isM=n.kind==='movie';
-      if(tab==='hist'){const id=n.o.ids.trakt;n.seen=isM?SEEN.m.has(id):SEEN.c.has(id);n.extra=isM?(n.seen?'✓ Ya la has visto':'Sin ver'):(n.seen?'✓ Serie completa':SEEN.s.has(id)?'En curso: aparece en Siguiente':'Sin ver')}
+      if(tab==='hist'){n.seen=(isM?SEEN.m:SEEN.s).has(n.o.ids.trakt);n.extra=n.seen?(isM?'✓ Ya la has visto':'✓ Ya la has empezado a ver'):'Sin ver'}
       else n.extra=following(n)?'✓ Ya la sigues':'No la sigues';
       return n;
     });
     if(!S.found.length)toast('Sin resultados en Trakt');
   }catch(err){toast(err.message);S.found=[]}
   paintList();
+}
+const PLATS={8:{n:'Netflix',d:['netflix.com']},119:{n:'Prime Video',d:['primevideo.com','amazon.com','amazon.es']},337:{n:'Disney+',d:['disneyplus.com']},1899:{n:'Max',d:['max.com','hbomax.com']},350:{n:'Apple TV+',d:['tv.apple.com']},149:{n:'Movistar Plus+',d:['movistarplus.es']},1773:{n:'SkyShowtime',d:['skyshowtime.com']},63:{n:'Filmin',d:['filmin.es']},283:{n:'Crunchyroll',d:['crunchyroll.com']}};
+const ALIAS={9:119,384:1899};
+async function providers(kind,tmdb){
+  if(!cfg.tmdb||!tmdb)return null;
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/${kind}/${tmdb}/watch/providers?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    const d=await r.json();return (d.results&&d.results[cfg.country])||null;
+  }catch(e){return undefined}
+}
+const PV=ls.get('prov')||{};
+async function provIds(kind,tmdb){
+  if(!cfg.tmdb||!tmdb)return [];
+  const k=`${kind}:${tmdb}:${cfg.country}`,c=PV[k];
+  if(c&&Date.now()-c.t<2592e5)return c.ids;
+  const r=await providers(kind,tmdb);
+  if(r===undefined)return [];
+  const ids=((r&&r.flatrate)||[]).map(x=>ALIAS[x.provider_id]||x.provider_id).filter(i=>PLATS[i]);
+  PV[k]={t:Date.now(),ids};ls.set('prov',PV);return ids;
+}
+async function fillPlat(el){
+  const [kind,tmdb,idx]=el.dataset.pl.split(':'),subs=cfg.subs||[];
+  if(!subs.length||!tmdb)return;
+  const ids=(await provIds(kind,tmdb).catch(()=>[])).filter(i=>subs.includes(i));
+  el.innerHTML=ids.map(i=>`<button class="b pl" data-pf="${i}" data-pi="${idx}">▶ ${PLATS[i].n}</button>`).join('');
+}
+const io='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);fillPlat(e.target)}}),{rootMargin:'200px'}):null;
+function observePlat(){document.querySelectorAll('[data-pl]:not([data-ob])').forEach(el=>{el.dataset.ob=1;io?io.observe(el):fillPlat(el)})}
+function okLink(u,pid){try{const x=new URL(u);return x.protocol==='https:'&&PLATS[pid].d.some(d=>x.hostname===d||x.hostname.endsWith('.'+d))}catch(e){return false}}
+function askLink(n,pid){
+  const k=(n.kind==='movie'?'m':'s')+n.o.ids.trakt+':'+pid,L=ls.get('lk')||{};
+  const v=prompt(`Pega el enlace de «${n.o.title}» en ${PLATS[pid].n} (en su app: Compartir → Copiar enlace). Se guarda solo en este dispositivo. Déjalo vacío para borrarlo.`,L[k]||'');
+  if(v===null)return null;
+  const t=v.trim();
+  if(!t){delete L[k];ls.set('lk',L);return ''}
+  if(!okLink(t,pid)){alert('El enlace no parece de '+PLATS[pid].n+'.');return null}
+  L[k]=t;ls.set('lk',L);return t;
 }
 async function tmdbInfo(kind,id){
   if(!cfg.tmdb||!id)return null;
@@ -227,10 +244,8 @@ function calCard(g,i){
     return `<div class="it" style="padding:8px 0"><div><span class="t">T${pad(n.ep.season)} | E${pad(n.ep.number)}</span> ${esc(n.ep.title||'')}<div class="s">${aired?'Emitido el ':'Se emite el '}${fmt(n.date)}${aired?'':' · '+t.toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'})}</div></div>${aired?`<button class="chk" data-e="${n.ep.ids.trakt}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
   }).join('');
   const st=new Date(f.date)<=now?'Ya emitido':'Próximo: '+fmt(f.date);
-  return `<div class="it"><div class="ph" data-o="${i}" data-p="tv:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${i}">${esc(o.title)}</div><div class="sub">${g.eps.length} ${g.eps.length===1?'episodio':'episodios'} · ${st}</div><details style="border:0;padding:0"><summary>Ver episodios</summary>${rows}</details></div></div>`;
+  return `<div class="it"><div class="ph" data-o="${i}" data-p="tv:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${i}">${esc(o.title)}</div><div class="sub">${g.eps.length} ${g.eps.length===1?'episodio':'episodios'} · ${st}</div>${(cfg.subs||[]).length&&o.ids.tmdb?`<div class="plat" data-pl="tv:${o.ids.tmdb}:${i}"></div>`:''}<details style="border:0;padding:0"><summary>Ver episodios</summary>${rows}</details></div></div>`;
 }
-const wcount=x=>(x.seasons||[]).filter(q=>q.number>0).reduce((t,q)=>t+q.episodes.length,0);
-const isComplete=x=>{const a=x.show.aired_episodes;return a>0&&wcount(x)>=a};
 let progData=[];
 const progPath=id=>`/shows/${id}/progress/watched`;
 function drawProg(){
@@ -241,25 +256,21 @@ function drawProg(){
 }
 const views={
   async prog(){
-    const [w,wl]=await Promise.all([tr('/sync/watched/shows?extended=full'),tr('/sync/watchlist/shows').catch(()=>[])]);
+    const [w,wl]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watchlist/shows').catch(()=>[])]);
     w.sort((a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||''));
     const seen=new Set(w.map(x=>x.show.ids.trakt));
-    const todo=w.filter(x=>!isComplete(x)).map(x=>x.show).concat(wl.map(x=>x.show).filter(x=>!seen.has(x.ids.trakt)));
-    const res=[];
-    for(let i=0;i<todo.length;i+=8){
-      res.push(...await Promise.all(todo.slice(i,i+8).map(x=>tr(progPath(x.ids.trakt)).then(p=>({show:x,p})).catch(()=>null))));
-    }
+    const shows=w.slice(0,25).map(x=>x.show).concat(wl.map(x=>x.show).filter(x=>!seen.has(x.ids.trakt)).slice(0,15));
+    const res=await Promise.all(shows.map(x=>tr(progPath(x.ids.trakt)).then(p=>({show:x,p})).catch(()=>null)));
     progData=res.filter(r=>r&&r.p.next_episode);
     await drawProg();
   },
   async hist(){
-    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=full'),tr('/sync/watched/movies'),loadWL().catch(()=>{})]);
+    const [sh,mv]=await Promise.all([tr('/sync/watched/shows?extended=noseasons'),tr('/sync/watched/movies'),loadWL().catch(()=>{})]);
     const by=(a,b)=>(b.last_watched_at||'').localeCompare(a.last_watched_at||'');
     sh.sort(by);mv.sort(by);
-    const done=sh.filter(isComplete);
-    SEEN.s=new Set(sh.map(x=>x.show.ids.trakt));SEEN.c=new Set(done.map(x=>x.show.ids.trakt));SEEN.m=new Set(mv.map(x=>x.movie.ids.trakt));
+    SEEN.s=new Set(sh.map(x=>x.show.ids.trakt));SEEN.m=new Set(mv.map(x=>x.movie.ids.trakt));
     const S=ST.hist;
-    S.shows=done.map(x=>({kind:'group',o:x.show,date:x.last_watched_at,sub:`Completa · ${x.show.aired_episodes} episodios`,extra:'Último: '+fmt(x.last_watched_at)}));
+    S.shows=sh.map(x=>({kind:'group',o:x.show,date:x.last_watched_at,sub:`${x.plays} ${x.plays===1?'episodio visto':'episodios vistos'}`,extra:'Último: '+fmt(x.last_watched_at)}));
     S.movies=mv.map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
     S.found=[];
     listShell('Buscar en tus vistos o en Trakt');
@@ -324,7 +335,7 @@ async function renderInto(list,label,pre){
   });
 }
 
-const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
+const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}>`;
 function loadPosters(){
   document.querySelectorAll('[data-p]').forEach(async el=>{
     const [k,id]=el.dataset.p.split(':');const u=await poster(k,id);
@@ -336,30 +347,34 @@ async function openDetail(n){
   $('#h').textContent=o.title;
   $('#v').innerHTML='<div class="msg">Cargando…</div>';
   try{
-    const [d,tx,pr,se,tm]=await Promise.all([
+    const [d,tx,pr,se,tm,pids]=await Promise.all([
       tr(base+'?extended=full'),
       tr(base+'/translations/es').catch(()=>[]),
       isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
       isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[]),
       tmdbInfo(kd,o.ids.tmdb),
+      provIds(kd,o.ids.tmdb).catch(()=>[]),
       loadWL().catch(()=>{})
     ]);
     const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
     const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.status,d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
+    const subs=cfg.subs||[],mine=(pids||[]).filter(i=>subs.includes(i)),first=mine[0];
+    const plb=mine.length?mine.map(i=>`<button class="b f" data-pf="${i}" data-pi="D">▶ ${PLATS[i].n}</button><button class="b" data-pe="${i}" title="Cambiar enlace">✎</button>`).join(''):`<div class="s">${subs.length?'No aparece en tus plataformas ('+esc(cfg.country)+').':'Elige tus plataformas en Ajustes para verlas aquí.'}</div>`;
     const fol=(isM?WL.m:WL.s).has(o.ids.trakt);
     const done={};
     if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
     const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
       const eps=(s.episodes||[]).map(x=>{
         const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date();
-        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
+        return `<div class="it" style="padding:8px 0"><div><span class="t">E${x.number}</span> ${esc(x.title||'')}<div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${!fut&&first?`<button class="b" data-pf="${first}" data-pi="D" title="Abrir en ${PLATS[first].n}">▶</button>`:''}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
       }).join('');
       const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length;
       return `<details><summary>Temporada ${s.number} · ${c}/${(s.episodes||[]).length}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
+    <div class="it"><div class="ph" data-p="${kd}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
     ${isM?`<button class="b f" data-d="seen">Visto</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div>
+    <div class="box" style="padding-bottom:0">${plb}</div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>go(tab);
     window._d={isM,id:o.ids.trakt,n};
@@ -367,10 +382,18 @@ async function openDetail(n){
   }catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
 }
 document.addEventListener('click',async e=>{
-  const zm=e.target.closest('img[data-z]');
-  if(zm){const z=document.createElement('div');z.className='zoom';const im=document.createElement('img');im.src=zm.src.replace('/w185/','/w780/');im.alt='';z.appendChild(im);z.onclick=()=>z.remove();document.body.appendChild(z);return}
   const sg=e.target.closest('[data-sg]');
   if(sg){const S=cur();S.seg=sg.dataset.sg;S.found=[];return paintList()}
+  const pf=e.target.closest('[data-pf]');
+  if(pf){
+    const n=pf.dataset.pi==='D'?window._d.n:items[+pf.dataset.pi],pid=+pf.dataset.pf;
+    let u=(ls.get('lk')||{})[(n.kind==='movie'?'m':'s')+n.o.ids.trakt+':'+pid];
+    if(!u)u=askLink(n,pid);
+    if(u)window.open(u,'_blank','noopener');
+    return;
+  }
+  const pe=e.target.closest('[data-pe]');
+  if(pe){const r=askLink(window._d.n,+pe.dataset.pe);if(r!==null)toast(r?'Enlace guardado':'Enlace borrado');return}
   const tb=e.target.closest('[data-tb]');
   if(tb){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===tb));document.querySelectorAll('[data-pane]').forEach(x=>x.hidden=x.dataset.pane!==tb.dataset.tb);return}
   const ds=e.target.closest('[data-ds]');
@@ -449,24 +472,18 @@ function cfgView(){
   <p class="s">Crea tu app en <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> (solo necesitas el Client ID) y tu clave gratuita en <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org</a>. Todo se guarda solo en este dispositivo.</p>
   <label>Trakt Client ID</label><input id="cid" value="${esc(cfg.cid||'')}" autocomplete="off">
   <label>TMDB API key (para las carátulas)</label><input id="tm" value="${esc(cfg.tmdb||'')}" autocomplete="off">
+  <label>País (2 letras) para saber en qué plataforma está cada título</label><input id="co" maxlength="2" value="${esc(cfg.country||'ES')}" autocomplete="off">
+  <label>Mis plataformas de streaming</label>
+  <div id="plats">${Object.entries(PLATS).map(([i,q])=>`<label class="chkrow"><input type="checkbox" value="${i}" ${(cfg.subs||[]).includes(+i)?'checked':''}>${q.n}</label>`).join('')}</div>
+  <p class="s">Solo se guarda qué plataformas tienes. No se piden ni se guardan usuarios ni contraseñas: la app de cada plataforma ya tiene tu sesión abierta en el móvil.</p>
   <button class="b" id="sv">Guardar ajustes</button><button class="b f" id="con">${tok?'Guardar y reconectar':'Guardar y conectar'}</button>
   ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
-  <div style="margin-top:14px"><button class="b" id="inst">📲 Instalar en el móvil</button><div class="s" id="instmsg" style="margin-top:6px"></div></div><div id="dv"></div></div>`;
+  <div id="dv"></div></div>`;
   $('#con').onclick=connect;
   $('#sv').onclick=()=>{saveCfg();toast('Ajustes guardados')};
-  $('#inst').onclick=installApp;
-  if(matchMedia('(display-mode: standalone)').matches){$('#inst').textContent='✓ Ya instalada';$('#inst').disabled=true}
   if($('#out'))$('#out').onclick=()=>{tok=null;ls.set('tok',null);setNav();cfgView()};
 }
-let deferredInstall=null;
-addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e});
-addEventListener('appinstalled',()=>{deferredInstall=null;toast('App instalada')});
-async function installApp(){
-  if(deferredInstall){deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;return}
-  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
-  $('#instmsg').textContent=ios?'En Safari: pulsa Compartir y luego «Añadir a pantalla de inicio».':'En Chrome: abre el menú ⋮ y pulsa «Instalar aplicación» o «Añadir a pantalla de inicio».';
-}
-function saveCfg(){cfg=Object.assign({},cfg,{cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim()});ls.set('cfg',cfg)}
+function saveCfg(){cfg=Object.assign({},cfg,{cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim(),country:($('#co').value.trim().toUpperCase()||'ES'),subs:[...document.querySelectorAll('#plats input:checked')].map(x=>+x.value)});ls.set('cfg',cfg)}
 async function connect(){
   saveCfg();
   ls.set('cfg',cfg);
@@ -502,8 +519,7 @@ async function go(t){
   try{await views[t]()}catch(err){$('#v').innerHTML=`<div class="msg">${esc(err.message)}</div>`}
 }
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-try{localStorage.removeItem('prov');localStorage.removeItem('lk')}catch(e){}
-(function(){const i=$('#intro');if(!i)return;const end=()=>{i.classList.add('out');setTimeout(()=>i.remove(),600)};i.onclick=end;setTimeout(end,2300)})();
+new MutationObserver(()=>observePlat()).observe($('#v'),{childList:true,subtree:true});
 go(tab);
 </script>
 </body>
