@@ -74,10 +74,17 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 img[data-z]{cursor:zoom-in}
 .it .b{margin:4px 4px 0 0;padding:1px 8px;font-size:11px}
 .it .b.f{background:rgba(255,107,154,.14);color:var(--ac);border-color:var(--ac)}
-.lc{flex:none;width:84px}
+.lc{flex:none;width:72px}
 .lc .ph,.lc img{display:block}
 .lb{display:flex;flex-direction:column;gap:4px;margin-top:6px}
-.it .lb .b{margin:0;width:100%;text-align:center;padding:2px 4px}
+.it .lb .b{margin:0;width:100%;text-align:center;padding:4px 0;font-size:10.5px;border-radius:10px;white-space:nowrap;overflow:hidden;line-height:1.3}
+.it .lb .b.f{border-width:1.5px;background:rgba(255,107,154,.18);color:var(--ac)}
+.pi{width:14px;height:14px;vertical-align:-3px;margin-right:4px}
+.pv{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pvi{width:20px;height:20px;border-radius:5px;opacity:.5}
+.pvi.on{opacity:.95}
+.pvt{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:5px;padding:0 5px}
+.pvt.on{color:var(--tx)}
 .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
 [data-ep],[data-tm]{cursor:pointer}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
@@ -146,9 +153,9 @@ async function tr(path,opt={}){
   if(!r.ok){const er=new Error('Trakt respondió '+r.status);er.status=r.status;throw er}
   return r.json();
 }
-const TMX=ls.get('tmx')||{};
+const TMX=ls.get('tmx2')||{};
 async function tmMeta(kind,tmdb){
-  const none={p:'',o:'',r:0};
+  const none={p:'',o:'',r:0,rd:''};
   if(!cfg.tmdb||!tmdb)return none;
   const k=kind+tmdb;
   if(TMX[k])return TMX[k];
@@ -158,8 +165,8 @@ async function tmMeta(kind,tmdb){
     const d=await g('es-ES');
     if(!d)return none;
     if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
-    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0};
-    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx',TMX),600);
+    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||''};
+    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx2',TMX),600);
     return TMX[k];
   }catch(e){return none}
   finally{freeSlot()}
@@ -210,9 +217,14 @@ async function progOf(id){
 }
 const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
 async function fillPoster(el){
-  const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),m=await tmMeta(k,id);
+  const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),idx=+el.dataset.o,m=await tmMeta(k,id);
   const d=it&&it.querySelector('.desc');if(d&&m.o)d.textContent=m.o;
   if(m.p&&el.isConnected)el.outerHTML=imgTag(m.p,el);
+  const pb=it&&it.querySelector('[data-a="play"]');
+  if(pb&&id){
+    const n=items[idx],names=await platNames(k,id,n&&n.o&&n.o.network);
+    pb.hidden=!(isReleased(n,m)&&names.some(isMine));
+  }
 }
 const pio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){pio.unobserve(e.target);fillPoster(e.target)}}),{rootMargin:'300px'}):null;
 function loadPosters(){
@@ -220,7 +232,8 @@ function loadPosters(){
 }
 /* ===== Estado y utilidades ===== */
 const WATCH=['seen','Visto','f'];
-const PLAY=['play','▶ Ver','',1];
+const PLAYLBL='<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#0b0710"/><path d="M9 6.5v11l9-5.5z" fill="#ff6b9a"/></svg>Play';
+const PLAY=['play',PLAYLBL,'',1];
 const PROG_BTNS=[WATCH,PLAY];
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
@@ -270,6 +283,7 @@ async function loadWL(){
 }
 const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
 const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
+const showSeenBtn=n=>n.sdone===false?['ss','Visto']:['ss','✓ Visto','f'];
 const seenBtn=n=>SEEN.m.has(n.o.ids.trakt)?['sw','✓ Visto','f']:['sw','Visto'];
 function fail(err,el){
   if(err.auth){tab='cfg';setNav();$('#h').textContent='Ajustes';cfgView();toast(err.message);return}
@@ -284,10 +298,9 @@ function card(n,btns,idx){
   const ept=n.kind==='episode'&&n.ep.title?`<div class="s">${esc(n.ep.title)}</div>`:'';
   const air=n.air!==undefined?`<div class="s" data-air="${idx}">${n.air?'Estreno: '+fmt(n.air):''}</div>`:'';
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
-  const pl=n.pl?`<div class="plat" data-pl="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}:${idx}"></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
   const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
-  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div>${pl}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 
 /* ===== Plataformas (etiqueta en Próximos) ===== */
@@ -303,35 +316,43 @@ async function wmNames(kind,tmdb){
     return [...new Set((await r2.json()).filter(x=>x.type==='sub'||x.type==='free').map(x=>x.name))];
   }catch(e){return []}
 }
-async function platNames(kind,tmdb,fallback){
-  const k=kind+tmdb,c=PV[k];
-  if(c&&Date.now()-c.t<2592e5)return c.n;
-  let names=[];
+const COMP=[[/prime video|amazon video|amazon prime/i,'Prime Video'],[/netflix/i,'Netflix'],[/disney/i,'Disney+'],[/\bmax\b|hbo/i,'Max'],[/apple tv/i,'Apple TV+'],[/movistar/i,'Movistar Plus+'],[/skyshowtime/i,'SkyShowtime'],[/filmin/i,'Filmin'],[/crunchyroll/i,'Crunchyroll'],[/rakuten/i,'Rakuten TV'],[/atresplayer/i,'Atresplayer'],[/rtve/i,'RTVE Play'],[/mitele/i,'Mitele'],[/youtube/i,'YouTube'],[/pluto/i,'Pluto TV'],[/plex/i,'Plex'],[/samsung/i,'Samsung TV Plus']];
+function company(name){
+  for(const [re,c] of COMP)if(re.test(name))return c;
+  return name.replace(/\b(with ads|basic with ads|standard with ads|amazon channel|apple tv channel|free)\b/ig,'').replace(/\s+/g,' ').trim()||name;
+}
+const PV2=ls.get('prov2')||{};
+async function platInfo(kind,tmdb,fallback){
+  const k=kind+tmdb,c=PV2[k],fb=fallback?[{n:company(fallback),l:''}]:[];
+  if(c&&Date.now()-c.t<2592e5)return c.i;
+  let list=[];
   if(cfg.tmdb){
     try{
       const r=await fetch(`https://api.themoviedb.org/3/${kind}/${tmdb}/watch/providers?api_key=${encodeURIComponent(cfg.tmdb)}`);
-      if(!r.ok)return fallback?[fallback]:[];
+      if(!r.ok)return fb;
       const d=await r.json(),z=d.results&&d.results[cfg.country||'ES'];
-      names=[...new Set([...((z&&z.flatrate)||[]),...((z&&z.free)||[])].map(x=>x.provider_name))];
-    }catch(e){return fallback?[fallback]:[]}
+      const g=new Map();
+      for(const q of [...((z&&z.flatrate)||[]),...((z&&z.free)||[]),...((z&&z.ads)||[])]){
+        const co=company(q.provider_name),cur=g.get(co);
+        if(!cur||q.provider_name.length<cur.src.length)g.set(co,{n:co,l:q.logo_path||'',src:q.provider_name});
+      }
+      list=[...g.values()].map(x=>({n:x.n,l:x.l}));
+    }catch(e){return fb}
   }
-  if(!names.length&&cfg.wm)names=await wmNames(kind,tmdb);
-  if(!names.length&&fallback)names=[fallback];
-  PV[k]={t:Date.now(),n:names};
-  clearTimeout(platNames.t);platNames.t=setTimeout(()=>ls.set('prov',PV),600);
-  return names;
+  if(!list.length&&cfg.wm){const seen=new Set();list=(await wmNames(kind,tmdb)).map(company).filter(n=>!seen.has(n)&&seen.add(n)).map(n=>({n,l:''}))}
+  if(!list.length)list=fb;
+  PV2[k]={t:Date.now(),i:list};
+  clearTimeout(platInfo.t);platInfo.t=setTimeout(()=>ls.set('prov2',PV2),600);
+  return list;
 }
-const isMine=nm=>{const x=normN(nm);return (cfg.plats||[]).map(normN).some(m=>m&&(x.includes(m)||m.includes(x)))};
-async function fillPlat(el){
-  const [kind,tmdb,idx]=el.dataset.pl.split(':'),n=items[+idx];
-  const names=tmdb?await platNames(kind,tmdb,n&&n.o&&n.o.network):[];
-  if(!el.isConnected)return;
-  el.textContent=names.length?'📺 '+names.join(' · '):'📺 Plataforma por confirmar';
-  const it=el.closest('.it'),pb=it&&it.querySelector('[data-a="play"]');
-  if(pb)pb.hidden=!names.some(isMine);
+async function platNames(kind,tmdb,fallback){return (await platInfo(kind,tmdb,fallback)).map(x=>x.n)}
+const isMine=nm=>{const x=normN(company(nm));return (cfg.plats||[]).map(normN).some(m=>m&&(x.includes(m)||m.includes(x)))};
+function observePl(){}
+function isReleased(n,m){
+  if(!n||n.kind==='episode')return true;
+  const d=n.rel||(m&&m.rd);
+  return !d||new Date(d)<=new Date();
 }
-const plio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){plio.unobserve(e.target);fillPlat(e.target)}}),{rootMargin:'200px'}):null;
-function observePl(){document.querySelectorAll('[data-pl]:not([data-ob])').forEach(el=>{el.dataset.ob=1;plio?plio.observe(el):fillPlat(el)})}
 
 /* ===== Scroll infinito ===== */
 let feedTok=0,feedIO=null;
@@ -393,7 +414,7 @@ async function refreshProg(i){
 
 /* ===== Listas Pendientes / Vistos ===== */
 function listBtns(mode,n){
-  if(mode==='hist')return n.kind==='movie'?[seenBtn(n)]:[];
+  if(mode==='hist')return n.kind==='movie'?[seenBtn(n)]:[showSeenBtn(n)];
   if(n.kind==='movie')return [seenBtn(n),FOLLOW(n),PLAY];
   return n.noFollow?[PLAY]:[FOLLOW(n),PLAY];
 }
@@ -428,12 +449,12 @@ async function searchList(mode,q){
 async function premieresList(){
   const d0=new Date().toISOString().slice(0,10);
   const [a,b]=await Promise.all([tr(`/calendars/all/shows/new/${d0}/30?extended=full`),tr(`/calendars/all/movies/${d0}/30`)]);
-  return [...a.map(x=>({kind:'show',o:x.show,date:x.first_aired,extra:'Estreno: '+fmt(x.first_aired),pl:true})),...b.map(x=>({kind:'movie',o:x.movie,date:x.released,extra:'Estreno: '+fmt(x.released),pl:true}))]
+  return [...a.map(x=>({kind:'show',o:x.show,date:x.first_aired,extra:'Estreno: '+fmt(x.first_aired),rel:x.first_aired})),...b.map(x=>({kind:'movie',o:x.movie,date:x.released,extra:'Estreno: '+fmt(x.released),rel:x.released}))]
     .filter(x=>x.o&&x.o.ids).sort((x,y)=>String(x.date).localeCompare(String(y.date))).slice(0,200);
 }
 function tmCard(n,i){
   const m=n.m,tt=n.tv?'show':'movie',d=(m.overview||'').slice(0,150);
-  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it" data-ci="${i}">${m.poster_path?`<img src="https://image.tmdb.org/t/p/w185${m.poster_path}" alt="" loading="lazy" data-tm="${m.id}" data-tt="${tt}">`:'<div class="ph"></div>'}<div><div class="t" data-tm="${m.id}" data-tt="${tt}">${esc(m.title)}</div><div class="s">${m.vote_average?'★ '+m.vote_average.toFixed(1)+' · ':''}Estreno: ${fmt(m.release_date)}</div>${n.pl?`<div class="plat" data-pl="${n.tv?'tv':'movie'}:${m.id}:${i}"></div>`:''}<div class="s">${esc(d)}${(m.overview||'').length>150?'…':''}</div></div></div>`;
+  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it" data-ci="${i}">${m.poster_path?`<img src="https://image.tmdb.org/t/p/w185${m.poster_path}" alt="" loading="lazy" data-tm="${m.id}" data-tt="${tt}">`:'<div class="ph"></div>'}<div><div class="t" data-tm="${m.id}" data-tt="${tt}">${esc(m.title)}</div><div class="s">${m.vote_average?'★ '+m.vote_average.toFixed(1)+' · ':''}Estreno: ${fmt(m.release_date)}</div><div class="s">${esc(d)}${(m.overview||'').length>150?'…':''}</div></div></div>`;
 }
 const TMDB='https://api.themoviedb.org/3/';
 async function tmdbGet(path,q){
@@ -483,7 +504,7 @@ async function discRun(mode,q){
       list=list.map(norm).filter(Boolean);
     }else if(mode==='n')list=await premieresList();
     else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
-    startFeed(r,list,{size:12,prep:async a=>a,btns:n=>[FOLLOW(n)],empty:'Sin resultados.'});
+    startFeed(r,list,{size:12,prep:async a=>a,btns:n=>[FOLLOW(n),PLAY],empty:'Sin resultados.'});
   }catch(err){fail(err,r)}
 }
 
@@ -513,7 +534,7 @@ const views={
     listShell('wl');
   },
   async cal(){
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-cs="e">Estrenos</button><button data-cs="c">Cines</button></div></div><div id="cl"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-cs="e">VODtv</button><button data-cs="c">Cines</button></div></div><div id="cl"></div>`;
     await calRun();
   },
   async disc(){
@@ -666,11 +687,15 @@ async function openDetail(n){
       return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b f" data-play="1">▶ Ver</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}</div></div>
+    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b" data-play="1">${PLAYLBL}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}</div></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>history.back();
     window._d={isM,id:o.ids.trakt,n};
     loadPosters();
+    platInfo(kd,o.ids.tmdb,d.network).then(list=>{
+      const el=$('#pv');if(!el||my!==navId)return;
+      el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}">${esc(x.n)}</span>`}).join('');
+    }).catch(()=>{});
   }catch(err){fail(err,$('#v'))}
 }
 
@@ -705,6 +730,14 @@ async function toggleSeenMovie(n,btn){
   on?SEEN.m.delete(id):SEEN.m.add(id);
   if(btn){btn.textContent=on?'Visto':'✓ Visto';btn.classList.toggle('f',!on)}
   toast(on?'Desmarcada como vista':'Marcada como vista');
+}
+async function toggleSeenShow(n,btn){
+  const id=n.o.ids.trakt,body={shows:[{ids:{trakt:id}}]},on=n.sdone!==false;
+  if(on&&!confirm('¿Quitar «'+n.o.title+'» de vistos? Se desmarcarán todos sus episodios.'))return;
+  await tr(on?'/sync/history/remove':'/sync/history',{body});
+  n.sdone=!on;delete CD[id];
+  btn.textContent=on?'Visto':'✓ Visto';btn.classList.toggle('f',!on);
+  toast(on?'Serie desmarcada':'Serie marcada como vista');
 }
 async function toggleFollow(n,btn){
   const isM=n.kind==='movie',set=isM?WL.m:WL.s,id=n.o.ids.trakt,ids={ids:{trakt:id}},body=isM?{movies:[ids]}:{shows:[ids]},on=set.has(id);
@@ -776,6 +809,7 @@ document.addEventListener('click',async e=>{
     const i=+x.dataset.i,n=items[i],a=x.dataset.a;x.disabled=true;
     try{
       if(a==='play'){await playTitle(tgtFor(n))}
+      else if(a==='ss')await toggleSeenShow(n,x);
       else if(a==='sw')await toggleSeenMovie(n,x);
       else if(a==='follow'){
         const was=await toggleFollow(n,x);
@@ -879,7 +913,7 @@ async function connect(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ls.get('pend')&&!tok)pollDevice()});
 
-const TABS=[['prog','En Progreso'],['wl','Pendientes'],['cal','Próximos'],['disc','Descubrir'],['hist','Vistos'],['cfg','Ajustes']];
+const TABS=[['prog','En Progreso'],['wl','Pendientes'],['disc','Descubrir'],['cal','Estrenos'],['hist','Vistos'],['cfg','Ajustes']];
 const ICON={prog:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',wl:'<path d="M6 3h12v18l-6-4-6 4z"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',disc:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',hist:'<path d="M2 13l4 4L14 8"/><path d="M10 17l1 1L22 8"/>',cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>'};
 function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[t[0]]}</svg></span>${t[1]}</button>`).join('')}
 $('#nav').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)go(t.dataset.t)});
