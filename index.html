@@ -74,17 +74,18 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 img[data-z]{cursor:zoom-in}
 .it .b{margin:4px 4px 0 0;padding:1px 8px;font-size:11px}
 .it .b.f{background:rgba(255,107,154,.14);color:var(--ac);border-color:var(--ac)}
-.lc{flex:none;width:72px}
+.it .lc{flex:none;width:72px;min-width:72px}
 .lc .ph,.lc img{display:block}
 .lb{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .it .lb .b{margin:0;width:100%;text-align:center;padding:4px 0;font-size:10.5px;border-radius:10px;white-space:nowrap;overflow:hidden;line-height:1.3}
 .it .lb .b.f{border-width:1.5px;background:rgba(255,107,154,.18);color:var(--ac)}
-.pi{width:14px;height:14px;vertical-align:-3px;margin-right:4px}
+.pi{width:11px;height:11px;vertical-align:-1px;margin-right:5px}
 .pv{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.pvi{width:20px;height:20px;border-radius:5px;opacity:.5}
-.pvi.on{opacity:.95}
+.it .pvi{width:18px;height:18px;border-radius:4px;opacity:.55}
+.it .pvi.on{opacity:.95}
 .pvt{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:5px;padding:0 5px}
 .pvt.on{color:var(--tx)}
+.b.pb{background:#0b0710;border-color:#2a2433;color:#efebf5}
 .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
 [data-ep],[data-tm]{cursor:pointer}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
@@ -231,9 +232,9 @@ function loadPosters(){
   document.querySelectorAll('[data-p]:not([data-w])').forEach(el=>{el.dataset.w=1;pio?pio.observe(el):fillPoster(el)});
 }
 /* ===== Estado y utilidades ===== */
-const WATCH=['seen','Visto','f'];
-const PLAYLBL='<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#0b0710"/><path d="M9 6.5v11l9-5.5z" fill="#ff6b9a"/></svg>Play';
-const PLAY=['play',PLAYLBL,'',1];
+const WATCH=['seen','Visto'];
+const PLAYLBL='<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="#ff6b9a"/></svg>Play';
+const PLAY=['play',PLAYLBL,'pb',1];
 const PROG_BTNS=[WATCH,PLAY];
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
@@ -298,9 +299,8 @@ function card(n,btns,idx){
   const ept=n.kind==='episode'&&n.ep.title?`<div class="s">${esc(n.ep.title)}</div>`:'';
   const air=n.air!==undefined?`<div class="s" data-air="${idx}">${n.air?'Estreno: '+fmt(n.air):''}</div>`:'';
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
-  const chk=btns.find(b=>b[0]==='seen');
-  const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
-  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
+  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div></div>`;
 }
 
 /* ===== Plataformas (etiqueta en Próximos) ===== */
@@ -687,7 +687,7 @@ async function openDetail(n){
       return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b" data-play="1">${PLAYLBL}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}</div></div>
+    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b pb" data-play="1">${PLAYLBL}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>history.back();
     window._d={isM,id:o.ids.trakt,n};
@@ -717,7 +717,7 @@ async function openEpisode(show,sn,en){
     const info=[e.first_aired?(fut?'Se emite el ':'Estreno: ')+fmt(e.first_aired):'',e.runtime?e.runtime+' min':'',e.rating?'★ '+e.rating.toFixed(1):''].filter(Boolean).join(' · ');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver a la serie</button></div>
     <div class="box"><div class="sub">T${pad(sn)} | E${pad(en)}</div><div class="t" style="font-size:20px">${esc(e.title||'Episodio '+en)}</div><div class="s">${esc(info)}</div>
-    <div style="margin:12px 0">${fut?'':'<button class="b f" data-play2="1">▶ Reproducir</button>'}<button class="b ${seen?'f':''}" data-ev="1">${seen?'✓ Visto':'Visto'}</button></div><p>${esc(ov)}</p></div>`;
+    <div style="margin:12px 0">${fut?'':`<button class="b pb" data-play2="1">${PLAYLBL}</button>`}<button class="b ${seen?'f':''}" data-ev="1">${seen?'✓ Visto':'Visto'}</button></div><p>${esc(ov)}</p></div>`;
     $('#back').onclick=()=>openDetail({kind:'show',o:show});
     window._ep={show,sn,en,id:e.ids.trakt,seen};
   }catch(err){fail(err,$('#v'))}
