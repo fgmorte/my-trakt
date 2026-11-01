@@ -74,6 +74,10 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 img[data-z]{cursor:zoom-in}
 .it .b{margin:4px 4px 0 0;padding:1px 8px;font-size:11px}
 .it .b.f{background:rgba(255,107,154,.14);color:var(--ac);border-color:var(--ac)}
+.lc{flex:none;width:84px}
+.lc .ph,.lc img{display:block}
+.lb{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.it .lb .b{margin:0;width:100%;text-align:center;padding:2px 4px}
 .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
 [data-ep],[data-tm]{cursor:pointer}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
@@ -283,7 +287,7 @@ function card(n,btns,idx){
   const pl=n.pl?`<div class="plat" data-pl="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}:${idx}"></div>`:'';
   const chk=btns.find(b=>b[0]==='seen');
   const bt=btns.filter(b=>b!==chk).map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
-  return `<div class="it" data-ci="${idx}"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div>${pl}${bt}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
+  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div>${pl}</div>${chk?`<button class="chk" data-a="seen" data-i="${idx}" aria-label="Marcar como visto">✓</button>`:''}</div>`;
 }
 
 /* ===== Plataformas (etiqueta en Próximos) ===== */
@@ -323,7 +327,7 @@ async function fillPlat(el){
   const names=tmdb?await platNames(kind,tmdb,n&&n.o&&n.o.network):[];
   if(!el.isConnected)return;
   el.textContent=names.length?'📺 '+names.join(' · '):'📺 Plataforma por confirmar';
-  const pb=el.parentElement&&el.parentElement.querySelector('[data-a="play"]');
+  const it=el.closest('.it'),pb=it&&it.querySelector('[data-a="play"]');
   if(pb)pb.hidden=!names.some(isMine);
 }
 const plio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){plio.unobserve(e.target);fillPlat(e.target)}}),{rootMargin:'200px'}):null;
@@ -662,8 +666,7 @@ async function openDetail(n){
       return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}
-    <button class="b f" data-play="1">▶ Ver</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div>
+    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b f" data-play="1">▶ Ver</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>`:''}</div></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>history.back();
     window._d={isM,id:o.ids.trakt,n};
@@ -937,6 +940,13 @@ addEventListener('popstate',e=>{
 });
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 (function(){const i=$('#intro');if(!i)return;const end=()=>{i.classList.add('out');setTimeout(()=>i.remove(),600)};i.onclick=end;setTimeout(end,2300)})();
+(function(){
+  const m=/^#ver=(\d+):(\d+):(\d+):(\d+):(\d*)/.exec(location.hash);
+  if(!m||!tok)return;
+  const [,sh,ep,sn,en,tm]=m;
+  history.replaceState(history.state,'',location.pathname);
+  setTimeout(()=>playTitle({paths:['/episodes/'+ep,'/shows/'+sh],tmdb:tm||undefined,kind:'tv',label:`T${sn}E${en}`}),600);
+})();
 if(ls.get('pend')&&!tok)pollDevice();
 go(tab);
 </script>
