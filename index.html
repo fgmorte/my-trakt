@@ -75,6 +75,8 @@ img[data-z]{cursor:zoom-in}
 .it .b{margin:4px 4px 0 0;padding:1px 8px;font-size:11px}
 .it .b.f{background:rgba(255,107,154,.14);color:var(--ac);border-color:var(--ac)}
 .it .lc{flex:none;width:72px;min-width:72px}
+.it .lc.w{width:116px;min-width:116px}
+.it .lc.w .ph,.it .lc.w img{width:116px;height:65px}
 .lc .ph,.lc img{display:block}
 .lb{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .it .lb .b{margin:0;width:100%;text-align:center;padding:4px 0;font-size:10.5px;border-radius:10px;white-space:nowrap;overflow:hidden;line-height:1.3}
@@ -86,6 +88,11 @@ img[data-z]{cursor:zoom-in}
 .pvt{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:5px;padding:0 5px}
 .pvt.on{color:var(--tx)}
 .b.pb{background:#0b0710;border-color:#2a2433;color:#efebf5}
+.b.pb:disabled{opacity:.35}
+.lb a.b{text-decoration:none}
+.pp[data-person]{cursor:pointer}
+.cr{display:flex;align-items:center;gap:6px;padding:4px 0}
+.cr span{flex:1;font-weight:700}
 .desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
 [data-ep],[data-tm]{cursor:pointer}
 .chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
@@ -154,9 +161,9 @@ async function tr(path,opt={}){
   if(!r.ok){const er=new Error('Trakt respondió '+r.status);er.status=r.status;throw er}
   return r.json();
 }
-const TMX=ls.get('tmx2')||{};
+const TMX=ls.get('tmx3')||{};
 async function tmMeta(kind,tmdb){
-  const none={p:'',o:'',r:0,rd:''};
+  const none={p:'',o:'',r:0,rd:'',bd:''};
   if(!cfg.tmdb||!tmdb)return none;
   const k=kind+tmdb;
   if(TMX[k])return TMX[k];
@@ -166,13 +173,29 @@ async function tmMeta(kind,tmdb){
     const d=await g('es-ES');
     if(!d)return none;
     if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
-    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||''};
-    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx2',TMX),600);
+    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||'',bd:d.backdrop_path?'https://image.tmdb.org/t/p/w300'+d.backdrop_path:''};
+    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx3',TMX),600);
     return TMX[k];
   }catch(e){return none}
   finally{freeSlot()}
 }
 async function poster(kind,tmdb){return (await tmMeta(kind,tmdb)).p}
+const STL=ls.get('stl')||{};
+async function epStill(tmdb,sn,en){
+  const k=tmdb+':'+sn+':'+en;
+  if(STL[k]!==undefined)return STL[k];
+  if(!cfg.tmdb)return '';
+  await slot();
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${sn}/episode/${en}?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    if(r.status===404)STL[k]='';
+    else if(!r.ok)return '';
+    else{const d=await r.json();STL[k]=d.still_path?'https://image.tmdb.org/t/p/w300'+d.still_path:''}
+    clearTimeout(epStill.t);epStill.t=setTimeout(()=>ls.set('stl',STL),600);
+    return STL[k];
+  }catch(x){return ''}
+  finally{freeSlot()}
+}
 
 // Normaliza cualquier respuesta de Trakt a {kind,o,ep,date}
 function norm(x){
@@ -191,11 +214,11 @@ async function tmdbInfo(kind,id){
 const JOBES={Director:'Dirección',Writer:'Guion',Screenplay:'Guion','Executive Producer':'Productor/a ejecutivo/a',Producer:'Producción','Original Music Composer':'Música','Director of Photography':'Fotografía'};
 function tabsHtml(tm,isM){
   if(!tm)return '';
-  const person=(nm,sub,pp)=>`<div class="pp">${pp?`<img src="https://image.tmdb.org/t/p/w92${pp}" alt="" loading="lazy">`:'<div class="av"></div>'}<div><b>${esc(nm)}</b><span>${esc(sub||'')}</span></div></div>`;
-  const cr=tm.credits||{},cast=(cr.cast||[]).slice(0,24).map(c=>person(c.name,c.character,c.profile_path)).join('');
+  const person=(nm,sub,pp,id)=>`<div class="pp" data-person="${id||''}">${pp?`<img src="https://image.tmdb.org/t/p/w92${pp}" alt="" loading="lazy">`:'<div class="av"></div>'}<div><b>${esc(nm)}</b><span>${esc(sub||'')}</span></div></div>`;
+  const cr=tm.credits||{},cast=(cr.cast||[]).slice(0,24).map(c=>person(c.name,c.character,c.profile_path,c.id)).join('');
   const seen=new Set(),eq=[];
-  (tm.created_by||[]).forEach(c=>eq.push(person(c.name,'Creación',c.profile_path)));
-  (cr.crew||[]).filter(c=>JOBES[c.job]).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path))}});
+  (tm.created_by||[]).forEach(c=>eq.push(person(c.name,'Creación',c.profile_path,c.id)));
+  (cr.crew||[]).filter(c=>JOBES[c.job]).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path,c.id))}});
   const rows=[],li=(t,v)=>{if(v)rows.push(`<div class="kv"><span>${t}</span>${v}</div>`)};
   const names=a=>(a||[]).map(x=>esc(x.name)).join(', ');
   li('Productoras',names(tm.production_companies));li('Cadenas',names(tm.networks));
@@ -220,11 +243,15 @@ const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==unde
 async function fillPoster(el){
   const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),idx=+el.dataset.o,m=await tmMeta(k,id);
   const d=it&&it.querySelector('.desc');if(d&&m.o)d.textContent=m.o;
-  if(m.p&&el.isConnected)el.outerHTML=imgTag(m.p,el);
+  let u=m.p;
+  if(el.dataset.ps&&id){const ps=el.dataset.ps.split(':');u=(await epStill(id,ps[0],ps[1]))||m.bd||m.p}
+  if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
+  const n=items[idx];
+  if(n&&n.unres){try{await ensure(n);syncBtns(it,n)}catch(e){}}
   const pb=it&&it.querySelector('[data-a="play"]');
   if(pb&&id){
-    const n=items[idx],names=await platNames(k,id,n&&n.o&&n.o.network);
-    pb.hidden=!(isReleased(n,m)&&names.some(isMine));
+    const names=await platNames(k,id,n&&n.o&&n.o.network),ok=isReleased(n,m)&&names.some(isMine);
+    if(n&&n.vod){pb.hidden=false;pb.disabled=!ok}else pb.hidden=!ok;
   }
 }
 const pio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){pio.unobserve(e.target);fillPoster(e.target)}}),{rootMargin:'300px'}):null;
@@ -235,7 +262,8 @@ function loadPosters(){
 const WATCH=['seen','Visto'];
 const PLAYLBL='<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="#ff6b9a"/></svg>Play';
 const PLAY=['play',PLAYLBL,'pb',1];
-const PROG_BTNS=[WATCH,PLAY];
+const SHARE=['share','↗ Compartir'];
+const PLAYV=['play',PLAYLBL,'pb',0,1];
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
 const LS2={hist:{shows:[],movies:[],seg:'show',q:''},wl:{shows:[],movies:[],seg:'show',q:''}};
@@ -261,7 +289,7 @@ async function verifyDone(sl){
     try{const p=await progOf(n.o.ids.trakt);CD[n.o.ids.trakt]={c:p.aired>0&&p.completed>=p.aired?1:0,t:Date.now()}}catch(e){}
   }));
   if(need.length)ls.set('cdone',CD);
-  return sl.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c));
+  return sl.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c)).map(n=>{if(n.chk)n.sdone=true;return n});
 }
 async function watchedMovies(){
   if(WM&&Date.now()-WM.t<3e5)return WM.d;
@@ -284,7 +312,43 @@ async function loadWL(){
 }
 const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
 const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
-const showSeenBtn=n=>n.sdone===false?['ss','Visto']:['ss','✓ Visto','f'];
+const showSeenBtn=n=>(n.sdone!==undefined?n.sdone:SEEN.c.has(n.o.ids.trakt))?['ss','✓ Visto','f']:['ss','Visto'];
+function btnsFor(n){
+  const out=[];
+  if(!n.noFollow)out.push(FOLLOW(n));
+  out.push(n.kind==='movie'?seenBtn(n):n.kind==='episode'?['seen','Visto']:showSeenBtn(n));
+  out.push(n.vod?PLAYV:PLAY,SHARE);
+  return out;
+}
+const TMAP=ls.get('tmap')||{};
+async function ensure(n){
+  if(!n.unres)return n;
+  const t=n.tv?'show':'movie',tmdb=n.o.ids.tmdb,k=t+tmdb;
+  let o=TMAP[k];
+  if(!o){
+    const r=await tr(`/search/tmdb/${tmdb}?type=${t}`),f=r.find(x=>x[t]);
+    if(!f)throw new Error('Sin ficha en Trakt');
+    const q=f[t];o={title:q.title,year:q.year,ids:q.ids};
+    TMAP[k]=o;clearTimeout(ensure.t);ensure.t=setTimeout(()=>ls.set('tmap',TMAP),600);
+  }
+  n.o=Object.assign({},o,{ids:Object.assign({},o.ids,{tmdb})});n.unres=false;
+  return n;
+}
+function syncBtns(it,n){
+  if(!it||!n.o||!n.o.ids.trakt)return;
+  const set=(a,txt,f)=>{const b=it.querySelector(`[data-a="${a}"]`);if(b){b.textContent=txt;b.classList.toggle('f',f)}};
+  const id=n.o.ids.trakt,isM=n.kind==='movie',fol=(isM?WL.m:WL.s).has(id);
+  if(isM){const on=SEEN.m.has(id);set('sw',on?'✓ Visto':'Visto',on)}
+  else{const on=n.sdone!==undefined?n.sdone:SEEN.c.has(id);set('ss',on?'✓ Visto':'Visto',on)}
+  set('follow',fol?'✓ Siguiendo':'+ Seguir',fol);
+}
+async function shareItem(n){
+  const o=n.o,tm=o.ids.tmdb,isM=n.kind==='movie',m=(typeof TMX!=='undefined'&&TMX[(isM?'movie':'tv')+tm])||{};
+  const url=o.ids.slug?`https://trakt.tv/${isM?'movies':'shows'}/${o.ids.slug}`:tm?`https://trakt.tv/search/tmdb/${tm}?id_type=${isM?'movie':'show'}`:'https://trakt.tv';
+  const text=`${o.title}${o.year?' ('+o.year+')':''}${m.r?' · ★ '+m.r.toFixed(1):''}${m.o?'\n'+m.o.slice(0,200):''}`;
+  if(navigator.share){try{await navigator.share({title:o.title,text,url})}catch(e){}}
+  else{try{await navigator.clipboard.writeText(text+'\n'+url);toast('Copiado para compartir')}catch(e){toast(url)}}
+}
 const seenBtn=n=>SEEN.m.has(n.o.ids.trakt)?['sw','✓ Visto','f']:['sw','Visto'];
 function fail(err,el){
   if(err.auth){tab='cfg';setNav();$('#h').textContent='Ajustes';cfgView();toast(err.message);return}
@@ -299,8 +363,8 @@ function card(n,btns,idx){
   const ept=n.kind==='episode'&&n.ep.title?`<div class="s">${esc(n.ep.title)}</div>`:'';
   const air=n.air!==undefined?`<div class="s" data-air="${idx}">${n.air?'Estreno: '+fmt(n.air):''}</div>`:'';
   const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
-  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}>${b[1]}</button>`).join('');
-  return `<div class="it" data-ci="${idx}"><div class="lc"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div></div>`;
+  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}${b[4]?' disabled':''}>${b[1]}</button>`).join('');
+  return `<div class="it" data-ci="${idx}"><div class="lc${n.kind==='episode'?' w':''}"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"${n.kind==='episode'?` data-ps="${n.ep.season}:${n.ep.number}"`:''}></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div></div>`;
 }
 
 /* ===== Plataformas (etiqueta en Próximos) ===== */
@@ -408,16 +472,12 @@ async function refreshProg(i){
   const el=document.querySelector(`.it[data-ci="${i}"]`);
   if(p.next_episode&&p.completed<p.aired){
     const nn=mkProg(n.o,p);items[i]=nn;
-    if(el){el.outerHTML=card(nn,PROG_BTNS,i);loadPosters();observePl();fillAir()}else go('prog');
+    if(el){el.outerHTML=card(nn,btnsFor(nn),i);loadPosters();observePl();fillAir()}else go('prog');
   }else if(el)el.remove();
 }
 
 /* ===== Listas Pendientes / Vistos ===== */
-function listBtns(mode,n){
-  if(mode==='hist')return n.kind==='movie'?[seenBtn(n)]:[showSeenBtn(n)];
-  if(n.kind==='movie')return [seenBtn(n),FOLLOW(n),PLAY];
-  return n.noFollow?[PLAY]:[FOLLOW(n),PLAY];
-}
+function listBtns(mode,n){return btnsFor(n)}
 function paintList(mode){
   const S=LS2[mode],q=S.q.trim().toLowerCase();
   const src=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
@@ -441,70 +501,104 @@ async function searchList(mode,q){
       return n;
     });
     hl.innerHTML='<div class="box"><button class="b" id="bk">← Volver a mi lista</button></div><div id="hr"></div>';
-    startFeed($('#hr'),d,{size:20,prep:async a=>a,btns:n=>n.kind==='movie'?[seenBtn(n),FOLLOW(n)]:[FOLLOW(n)],empty:'Sin resultados en Trakt.'});
+    startFeed($('#hr'),d,{size:20,prep:async a=>a,btns:btnsFor,empty:'Sin resultados en Trakt.'});
   }catch(err){fail(err,hl)}
 }
 
-/* ===== Próximos ===== */
-async function premieresList(){
-  const d0=new Date().toISOString().slice(0,10);
-  const [a,b]=await Promise.all([tr(`/calendars/all/shows/new/${d0}/30?extended=full`),tr(`/calendars/all/movies/${d0}/30`)]);
-  return [...a.map(x=>({kind:'show',o:x.show,date:x.first_aired,extra:'Estreno: '+fmt(x.first_aired),rel:x.first_aired})),...b.map(x=>({kind:'movie',o:x.movie,date:x.released,extra:'Estreno: '+fmt(x.released),rel:x.released}))]
-    .filter(x=>x.o&&x.o.ids).sort((x,y)=>String(x.date).localeCompare(String(y.date))).slice(0,200);
-}
-function tmCard(n,i){
-  const m=n.m,tt=n.tv?'show':'movie',d=(m.overview||'').slice(0,150);
-  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it" data-ci="${i}">${m.poster_path?`<img src="https://image.tmdb.org/t/p/w185${m.poster_path}" alt="" loading="lazy" data-tm="${m.id}" data-tt="${tt}">`:'<div class="ph"></div>'}<div><div class="t" data-tm="${m.id}" data-tt="${tt}">${esc(m.title)}</div><div class="s">${m.vote_average?'★ '+m.vote_average.toFixed(1)+' · ':''}Estreno: ${fmt(m.release_date)}</div><div class="s">${esc(d)}${(m.overview||'').length>150?'…':''}</div></div></div>`;
-}
+/* ===== Estrenos ===== */
 const TMDB='https://api.themoviedb.org/3/';
 async function tmdbGet(path,q){
-  const r=await fetch(`${TMDB}${path}?api_key=${encodeURIComponent(cfg.tmdb)}&language=es-ES&region=ES&${q}`);
-  return r.ok?r.json():null;
+  try{
+    const r=await fetch(`${TMDB}${path}?api_key=${encodeURIComponent(cfg.tmdb)}&language=es-ES&region=ES&${q}`);
+    return r.ok?await r.json():null;
+  }catch(e){return null}
 }
-async function estrenos(box){
-  if(!cfg.tmdb){box.innerHTML='<div class="msg">Falta la clave de TMDB en Ajustes.</div>';return}
-  const d0=new Date(Date.now()-14*864e5).toISOString().slice(0,10),d1=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
-  const pages=[1,2,3].map(p=>({tv:true,p})).concat([1,2,3].map(p=>({tv:false,p})));
-  startFeed(box,pages,{size:1,html:tmCard,empty:'No hay estrenos nuevos en plataformas.',
-    prep:async([pg])=>{
-      const w='watch_region=ES&with_watch_monetization_types=flatrate&sort_by=popularity.desc&page='+pg.p;
-      const d=pg.tv?await tmdbGet('discover/tv',`first_air_date.gte=${d0}&first_air_date.lte=${d1}&${w}`):await tmdbGet('discover/movie',`with_release_type=4&release_date.gte=${d0}&release_date.lte=${d1}&${w}`);
-      if(!d||pg.p>d.total_pages)return [];
-      return (d.results||[]).map((m,j)=>({kind:'cine',tv:pg.tv,pl:true,m:pg.tv?{...m,title:m.name,release_date:m.first_air_date}:m,head:j===0&&pg.p===1?(pg.tv?'Series nuevas en plataformas':'Películas nuevas en plataformas'):''}));
-    }});
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function tmItem(m,tv,extra){
+  const date=(tv?m.first_air_date:m.release_date)||'',y=date.slice(0,4);
+  return {kind:tv?'show':'movie',tv,unres:true,vod:true,date,rel:date,extra:extra||('Estreno: '+fmt(date)),o:{title:(tv?m.name:m.title)||'',year:y?+y:undefined,ids:{tmdb:m.id}}};
 }
-async function cinema(box){
-  const cs=cfg.cities||[];
-  const links=cs.map(c=>`<a class="b f" href="https://www.google.com/search?q=${encodeURIComponent('horarios de salas de cine en '+c)}" target="_blank" rel="noopener">🎟️ ${esc(c)}</a>`).join('');
-  box.innerHTML=`<div class="box"><div class="sub">Cartelera por cines</div><div class="s" style="margin:4px 0 4px">${cs.length?'Pulsa tu ciudad para ver las salas de cine con sus películas y horarios:':'Elige tus ciudades en Ajustes para ver aquí su cartelera.'}</div>${links}<div class="s" style="margin-top:8px">Los horarios por cine se abren en Google. Debajo, las películas en cartel en España.</div></div><div id="cf"></div>`;
-  if(!cfg.tmdb)return;
-  const pages=[1,2,3,4,5].map(p=>({k:'now',p})).concat([1,2,3].map(p=>({k:'up',p})));
-  startFeed($('#cf'),pages,{size:1,empty:'No se pudo cargar la cartelera.',html:tmCard,
-    prep:async([pg])=>{
-      const d=await tmdbGet('movie/'+(pg.k==='now'?'now_playing':'upcoming'),'page='+pg.p);
-      if(!d||pg.p>d.total_pages)return [];
-      return (d.results||[]).map((m,j)=>({kind:'cine',tv:false,m,head:j===0&&pg.p===1?(pg.k==='now'?'En cartelera':'Próximamente'):''}));
-    }});
+const ES={vod:null,cine:null,vt:0,ct:0,q:''};
+async function vodList(){
+  const now=new Date(),d0=ymd(new Date(now.getFullYear(),now.getMonth(),1)),d1=ymd(new Date(Date.now()+30*864e5));
+  const w='watch_region=ES&with_watch_monetization_types=flatrate&page=',jobs=[];
+  for(let p=1;p<=3;p++){
+    jobs.push(tmdbGet('discover/tv',`first_air_date.gte=${d0}&first_air_date.lte=${d1}&sort_by=first_air_date.asc&${w}${p}`).then(d=>((d&&d.results)||[]).map(m=>tmItem(m,true))));
+    jobs.push(tmdbGet('discover/movie',`with_release_type=4&release_date.gte=${d0}&release_date.lte=${d1}&sort_by=primary_release_date.asc&${w}${p}`).then(d=>((d&&d.results)||[]).map(m=>tmItem(m,false))));
+  }
+  const seen=new Set();
+  return (await Promise.all(jobs)).flat().filter(x=>x.date&&!seen.has(x.tv+':'+x.o.ids.tmdb)&&seen.add(x.tv+':'+x.o.ids.tmdb)).sort((a,b)=>a.date.localeCompare(b.date));
+}
+async function cineList(){
+  const jobs=[];
+  for(let p=1;p<=5;p++)jobs.push(tmdbGet('movie/now_playing','page='+p).then(d=>((d&&d.results)||[]).map(m=>Object.assign(tmItem(m,false),{grp:'now',gname:'En cartelera'}))));
+  for(let p=1;p<=3;p++)jobs.push(tmdbGet('movie/upcoming','page='+p).then(d=>((d&&d.results)||[]).map(m=>Object.assign(tmItem(m,false),{grp:'up',gname:'Próximamente'}))));
+  const seen=new Set();
+  return (await Promise.all(jobs)).flat().filter(x=>!seen.has(x.o.ids.tmdb)&&seen.add(x.o.ids.tmdb));
+}
+function cineBar(){
+  const cs=cfg.cities||[],g=q=>`https://www.google.com/search?q=${encodeURIComponent(q)}&hl=es&gl=es`;
+  const row=c=>`<div class="cr"><span>${esc(c)}</span><a class="b" href="${g('cartelera '+c)}" target="_blank" rel="noopener">Por películas</a><a class="b" href="${g('cines '+c+' horarios')}" target="_blank" rel="noopener">Por salas</a></div>`;
+  return `<div class="box"><div class="sub">Cartelera por ciudad</div><div class="s" style="margin:4px 0 6px">${cs.length?'Se abre en Google, que ordena el resultado por películas y por salas:':'Elige tus ciudades en Ajustes.'}</div>${cs.map(row).join('')}</div>`;
+}
+function paintEs(){
+  const cf=$('#cf');if(!cf)return;
+  const cine=CAL.seg==='c',q=ES.q.trim().toLowerCase(),base=(cine?ES.cine:ES.vod)||[];
+  const src=base.filter(n=>!q||n.o.title.toLowerCase().includes(q));
+  let last='';
+  src.forEach(n=>{n.head=n.gname&&n.grp!==last?n.gname:'';if(n.gname)last=n.grp});
+  document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
+  $('#cb').innerHTML=cine?cineBar():'';
+  startFeed(cf,src,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>(n.head?`<div class="sec">${n.head}</div>`:'')+card(n,btnsFor(n),i),empty:q?'Ninguna coincidencia. Pulsa Intro para buscar.':(cine?'No se pudo cargar la cartelera.':'No hay estrenos nuevos en plataformas.')});
+}
+async function esSearch(q){
+  q=q.trim();if(!q||!$('#cf'))return;
+  const cf=$('#cf');cf.innerHTML='<div class="msg">Buscando…</div>';
+  try{
+    const d=await tmdbGet('search/multi','query='+encodeURIComponent(q));
+    const list=((d&&d.results)||[]).filter(x=>x.media_type==='movie'||x.media_type==='tv').map(x=>tmItem(x,x.media_type==='tv'));
+    cf.innerHTML='<div class="box"><button class="b" id="bk">← Volver</button></div><div id="cr2"></div>';
+    startFeed($('#cr2'),list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
+  }catch(err){fail(err,cf)}
 }
 async function calRun(){
-  const box=$('#cl');
+  const my=navId,box=$('#cl');
+  if(!cfg.tmdb){box.innerHTML='<div class="msg">Falta la clave de TMDB en Ajustes.</div>';return}
+  box.innerHTML='<div id="cb"></div><div id="cf"><div class="msg">Cargando…</div></div>';
   document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
-  box.innerHTML='<div class="msg">Cargando…</div>';
-  try{if(CAL.seg==='c')await cinema(box);else await estrenos(box)}catch(err){fail(err,box)}
+  try{
+    const old=t=>Date.now()-t>6e5;
+    if(CAL.seg==='c'){if(!ES.cine||old(ES.ct)){ES.cine=await cineList();ES.ct=Date.now()}}
+    else if(!ES.vod||old(ES.vt)){ES.vod=await vodList();ES.vt=Date.now()}
+    if(my!==navId)return;
+    paintEs();
+  }catch(err){fail(err,box)}
 }
 
 /* ===== Descubrir ===== */
+const CANALES=[
+  ['RTVE Play',[['La 1','https://www.rtve.es/play/videos/directo/la-1/'],['La 2','https://www.rtve.es/play/videos/directo/la-2/']]],
+  ['Mitele',[['Telecinco','https://www.mitele.es/directo/telecinco/'],['Cuatro','https://www.mitele.es/directo/cuatro/']]],
+  ['Atresplayer gratis',[['Antena 3','https://www.atresplayer.com/directos/antena3/'],['laSexta','https://www.atresplayer.com/directos/lasexta/']]]
+];
+function liveTv(box){
+  const mine=(cfg.plats||[]).map(normN),rows=[];
+  CANALES.forEach(([pl,chs])=>{if(mine.includes(normN(pl))||(pl==='Atresplayer gratis'&&mine.includes('atresplayer')))chs.forEach(([nm,url])=>rows.push({pl,nm,url}))});
+  if(!rows.length){box.innerHTML='<div class="msg">Marca RTVE Play, Mitele o Atresplayer gratis en Ajustes para ver aquí sus canales.</div>';return}
+  const g=q=>`https://www.google.com/search?q=${encodeURIComponent(q)}&hl=es&gl=es`;
+  box.innerHTML='<div class="box s">Canales de tus plataformas gratuitas. La programación de hoy se abre en Google.</div>'+rows.map(r=>`<div class="it"><div class="lc"><div class="ph" style="display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:13px;padding:4px">${esc(r.nm)}</div><div class="lb"><a class="b pb" href="${r.url}" target="_blank" rel="noopener">${PLAYLBL}</a><a class="b" href="${g('programación '+r.nm+' hoy')}" target="_blank" rel="noopener">Guía hoy</a></div></div><div><div class="t">${esc(r.nm)}</div><div class="sub">En directo</div><div class="s">${esc(r.pl.replace(' gratis',''))} · canal generalista</div></div></div>`).join('');
+}
 async function discRun(mode,q){
   const r=$('#r');r.innerHTML='<div class="msg">Cargando…</div>';
   try{
+    if(mode==='l')return liveTv(r);
     let list;
     if(mode==='t'){
       const [m,s]=await Promise.all([tr('/movies/trending?limit=40'),tr('/shows/trending?limit=40')]);
       list=[];for(let i=0;i<40;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
       list=list.map(norm).filter(Boolean);
-    }else if(mode==='n')list=await premieresList();
-    else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
-    startFeed(r,list,{size:12,prep:async a=>a,btns:n=>[FOLLOW(n),PLAY],empty:'Sin resultados.'});
+    }else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
+    startFeed(r,list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
   }catch(err){fail(err,r)}
 }
 
@@ -514,7 +608,7 @@ const views={
     const my=navId,w=await watchedShows();
     if(my!==navId)return;
     const st=w.filter(x=>!isComplete(x)).sort(byDesc('last_watched_at')).map(x=>({show:x.show}));
-    startFeed($('#v'),st,{size:10,prep:progBatch,btns:()=>PROG_BTNS,after:fillAir,empty:'Estás al día con todas tus series. 🎉'});
+    startFeed($('#v'),st,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:'Estás al día con todas tus series. 🎉'});
   },
   async wl(){
     const my=navId;
@@ -534,14 +628,17 @@ const views={
     listShell('wl');
   },
   async cal(){
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-cs="e">VODtv</button><button data-cs="c">Cines</button></div></div><div id="cl"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-cs="e">VODtv</button><button data-cs="c">Cines</button></div><input id="eq" type="search" placeholder="Buscar en estrenos" enterkeyhint="search" value="${esc(ES.q)}"></div><div id="cl"></div>`;
+    $('#eq').addEventListener('input',e=>{ES.q=e.target.value;paintEs()});
+    $('#eq').addEventListener('keydown',e=>{if(e.key==='Enter')esSearch(e.target.value)});
+    await Promise.all([loadWL(),loadSeen()]).catch(()=>{});
     await calRun();
   },
   async disc(){
     const my=navId;
     await loadWL().catch(()=>{});
     if(my!==navId)return;
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-ds="t" class="on">Tendencias</button><button data-ds="n">Estrenos del mes</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-ds="t" class="on">Tendencias</button><button data-ds="l">LiveTV</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim())discRun('s',e.target.value)});
     await discRun('t');
   },
@@ -674,7 +771,7 @@ async function openDetail(n){
     const stt=STAT[(d.status||'').toLowerCase()]||(d.status||'').toUpperCase();
     const prg=pr?(pr.aired>0&&pr.completed>=pr.aired?'VISTO':pr.completed>0?'INICIADO':''):(isM&&SEEN.m.has(o.ids.trakt)?'VISTO':'');
     const chips=[prg,stt].filter(Boolean).map(c=>`<span class="chip">${esc(c)}</span>`).join('');
-    const fol=(isM?WL.m:WL.s).has(o.ids.trakt),sn=SEEN.m.has(o.ids.trakt);
+    const fol=(isM?WL.m:WL.s).has(o.ids.trakt),sn=SEEN.m.has(o.ids.trakt),sd=SEEN.c.has(o.ids.trakt);
     const done={};
     if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
     const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
@@ -687,7 +784,7 @@ async function openDetail(n){
       return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b pb" data-play="1">${PLAYLBL}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:''}<button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
+    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>history.back();
     window._d={isM,id:o.ids.trakt,n};
@@ -696,6 +793,45 @@ async function openDetail(n){
       const el=$('#pv');if(!el||my!==navId)return;
       el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}">${esc(x.n)}</span>`}).join('');
     }).catch(()=>{});
+  }catch(err){fail(err,$('#v'))}
+}
+
+/* ===== Persona (reparto y equipo) ===== */
+const PERS={seg:'m',movies:[],shows:[]};
+function paintPers(){
+  document.querySelectorAll('[data-ps]').forEach(b=>b.classList.toggle('on',b.dataset.ps===PERS.seg));
+  startFeed($('#pl'),PERS.seg==='m'?PERS.movies:PERS.shows,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin títulos en esta categoría.'});
+}
+async function openPerson(id){
+  navId++;const my=navId,prev=window._d&&window._d.n;
+  $('#h').textContent='Reparto y equipo';
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  window.scrollTo(0,0);
+  if(!detailOpen){history.pushState({d:1},'');dpush++}
+  detailOpen=true;
+  try{
+    const [d]=await Promise.all([tmdbGet('person/'+id,'append_to_response=combined_credits'),loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
+    if(my!==navId)return;
+    if(!d)throw new Error('No hay datos de esta persona');
+    let bio=d.biography||'';
+    if(!bio){try{const r=await fetch(`${TMDB}person/${id}?api_key=${encodeURIComponent(cfg.tmdb)}&language=en-US`);if(r.ok)bio=(await r.json()).biography||''}catch(e){}}
+    const cc=d.combined_credits||{},seen=new Set(),all=[];
+    [...(cc.cast||[]).map(c=>({c,role:c.character||'Reparto'})),...(cc.crew||[]).filter(c=>JOBES[c.job]).map(c=>({c,role:JOBES[c.job]}))].forEach(({c,role})=>{
+      if(c.media_type!=='movie'&&c.media_type!=='tv')return;
+      const k=c.media_type+c.id;if(seen.has(k))return;seen.add(k);
+      const tv=c.media_type==='tv',date=(tv?c.first_air_date:c.release_date)||'';
+      const it=tmItem(c,tv,(role?role+' · ':'')+(date?fmt(date):'Sin fecha'));it.vod=false;
+      all.push(it);
+    });
+    all.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    PERS.movies=all.filter(x=>!x.tv);PERS.shows=all.filter(x=>x.tv);PERS.seg=PERS.movies.length?'m':'s';
+    const info=[d.birthday?'Nacimiento: '+fmt(d.birthday):'',d.place_of_birth||'',d.deathday?'Fallecimiento: '+fmt(d.deathday):''].filter(Boolean).join(' · ');
+    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
+    <div class="it"><div class="lc">${d.profile_path?`<img src="https://image.tmdb.org/t/p/w185${d.profile_path}" alt="" data-z="1">`:'<div class="ph"></div>'}</div><div><div class="t">${esc(d.name)}</div><div class="s">${esc(info)}</div><div class="s">${esc(d.known_for_department||'')}</div></div></div>
+    ${bio?`<div class="box"><p>${esc(bio.length>700?bio.slice(0,700)+'…':bio)}</p></div>`:''}
+    <div class="box" style="padding-bottom:0"><div class="seg"><button data-ps="m">Películas (${PERS.movies.length})</button><button data-ps="s">Series (${PERS.shows.length})</button></div></div><div id="pl"></div>`;
+    $('#back').onclick=()=>prev?openDetail(prev):history.back();
+    paintPers();
   }catch(err){fail(err,$('#v'))}
 }
 
@@ -732,10 +868,11 @@ async function toggleSeenMovie(n,btn){
   toast(on?'Desmarcada como vista':'Marcada como vista');
 }
 async function toggleSeenShow(n,btn){
-  const id=n.o.ids.trakt,body={shows:[{ids:{trakt:id}}]},on=n.sdone!==false;
-  if(on&&!confirm('¿Quitar «'+n.o.title+'» de vistos? Se desmarcarán todos sus episodios.'))return;
+  const id=n.o.ids.trakt,body={shows:[{ids:{trakt:id}}]},on=n.sdone!==undefined?n.sdone:SEEN.c.has(id);
+  if(!confirm(on?'¿Quitar «'+n.o.title+'» de vistos? Se desmarcarán todos sus episodios.':'¿Marcar «'+n.o.title+'» como serie vista completa?'))return;
   await tr(on?'/sync/history/remove':'/sync/history',{body});
   n.sdone=!on;delete CD[id];
+  if(on)SEEN.c.delete(id);else SEEN.c.add(id);
   btn.textContent=on?'Visto':'✓ Visto';btn.classList.toggle('f',!on);
   toast(on?'Serie desmarcada':'Serie marcada como vista');
 }
@@ -754,7 +891,9 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-cs]'))){CAL.seg=x.dataset.cs;calRun();return}
   if((x=T.closest('[data-ds]'))){document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===x));discRun(x.dataset.ds);return}
   if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
-  if(T.closest('#bk')){paintList(tab);return}
+  if(T.closest('#bk')){tab==='cal'?paintEs():paintList(tab);return}
+  if((x=T.closest('[data-ps]'))){PERS.seg=x.dataset.ps;paintPers();return}
+  if((x=T.closest('[data-person]'))){if(x.dataset.person)openPerson(x.dataset.person);return}
   if((x=T.closest('[data-sv]'))){
     e.preventDefault();
     const det=x.closest('details'),un=[...det.querySelectorAll('[data-e]')],wa=[...det.querySelectorAll('[data-u]')];
@@ -787,7 +926,11 @@ document.addEventListener('click',async e=>{
     catch(err){toast(err.message)}
     return;
   }
-  if((x=T.closest('[data-o]'))){const n=items[+x.dataset.o];if(n)openDetail(n);return}
+  if((x=T.closest('[data-o]'))){
+    const n=items[+x.dataset.o];if(!n)return;
+    if(n.unres){try{await ensure(n)}catch(err){toast(err.message);return}}
+    openDetail(n);return;
+  }
   if((x=T.closest('[data-u]'))){
     x.disabled=true;
     try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Visto deshecho')}
@@ -802,12 +945,14 @@ document.addEventListener('click',async e=>{
   }
   if((x=T.closest('[data-d]'))){
     const {isM,id,n}=window._d;x.disabled=true;
-    try{if(x.dataset.d==='seen')await toggleSeenMovie(n,x);else await toggleFollow(n,x)}catch(err){toast(err.message)}
+    try{if(x.dataset.d==='seen')await toggleSeenMovie(n,x);else if(x.dataset.d==='sseen')await toggleSeenShow(n,x);else if(x.dataset.d==='share')await shareItem(n);else await toggleFollow(n,x)}catch(err){toast(err.message)}
     x.disabled=false;return;
   }
   if((x=T.closest('[data-a]'))){
     const i=+x.dataset.i,n=items[i],a=x.dataset.a;x.disabled=true;
     try{
+      if(a==='share'){await shareItem(n);x.disabled=false;return}
+      if(n.unres){await ensure(n);syncBtns(x.closest('.it'),n)}
       if(a==='play'){await playTitle(tgtFor(n))}
       else if(a==='ss')await toggleSeenShow(n,x);
       else if(a==='sw')await toggleSeenMovie(n,x);
