@@ -1,4 +1,5 @@
-const CACHE = 'mi-trakt-v31';
+```javascript
+const CACHE = 'mi-trakt-v32';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +19,6 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Carátulas de TMDB: caché primero, se guardan al verlas
   if (url.hostname === 'image.tmdb.org') {
     e.respondWith(
       caches.open(CACHE).then(c =>
@@ -28,10 +28,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Datos de Trakt y TMDB: siempre de la red, sin cachear
-  if (url.origin !== location.origin) return;
+  if (url.origin !== location.origin) {
+    return; 
+  }
 
-  // Archivos de la app: red primero (para recibir actualizaciones), caché si no hay conexión
   e.respondWith(
     fetch(req).then(r => {
       const copy = r.clone();
@@ -39,4 +39,3 @@ self.addEventListener('fetch', e => {
       return r;
     }).catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
   );
-});
