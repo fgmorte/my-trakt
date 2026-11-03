@@ -1,0 +1,137 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+    body { font-family: Arial, sans-serif; font-size: 11pt; color: #333; line-height: 1.4; }
+    h1 { color: #ed1c24; border-bottom: 2px solid #ed1c24; padding-bottom: 5px; font-size: 22pt; }
+    h2 { color: #1d1d1d; border-bottom: 1px solid #ccc; padding-bottom: 3px; font-size: 14pt; margin-top: 20px; break-after: avoid; }
+    .endpoint-block { margin-bottom: 8px; break-inside: avoid; }
+    .method { font-weight: bold; padding: 2px 6px; border-radius: 3px; font-size: 9pt; display: inline-block; width: 55px; text-align: center; }
+    .get { background-color: #d1e7dd; color: #0f5132; }
+    .post { background-color: #cff4fc; color: #055160; }
+    .delete { background-color: #f8d7da; color: #842029; }
+    .put { background-color: #fff3cd; color: #664d03; }
+    .path { font-family: monospace; font-size: 10.5pt; font-weight: bold; margin-left: 5px; color: #222; }
+    .desc { margin-left: 70px; font-size: 10pt; color: #555; margin-top: 2px; }
+    .footer { font-size: 8pt; color: #777; margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Referencia Completa de Endpoints de la API de Trakt.tv (v2)</h1>
+<p>Esta es la estructura general y lista de los principales endpoints públicos y autenticados que ofrece la API oficial de Trakt.tv.</p>
+
+<h2>Authentication (OAuth & Device)</h2>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/oauth/token</span><div class="desc">Intercambiar código o refresh token por un access token.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/oauth/revoke</span><div class="desc">Revocar un access token activo.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/oauth/device/code</span><div class="desc">Generar códigos para autenticación en dispositivos (TV, consolas).</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/oauth/device/token</span><div class="desc">Consultar si el usuario ha autorizado el código de dispositivo.</div></div>
+
+<h2>Calendars (Calendarios)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/my/shows/{start_date}/{days}</span><div class="desc">Calendario personal de episodios (Requiere Auth).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/my/new_shows/{start_date}/{days}</span><div class="desc">Nuevas series en tu calendario (Requires Auth).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/my/season_premieres/{start_date}/{days}</span><div class="desc">Estrenos de temporada personales (Requires Auth).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/my/movies/{start_date}/{days}</span><div class="desc">Películas en tu calendario personal (Requires Auth).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/all/shows/{start_date}/{days}</span><div class="desc">Calendario global de todas las series.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/all/new_shows/{start_date}/{days}</span><div class="desc">Calendario global de nuevos shows.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/all/season_premieres/{start_date}/{days}</span><div class="desc">Calendario global de estrenos de temporada.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/calendars/all/movies/{start_date}/{days}</span><div class="desc">Calendario global de estrenos de películas.</div></div>
+
+<h2>Movies (Películas)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/trending</span><div class="desc">Películas en tendencia en tiempo real.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/popular</span><div class="desc">Películas más populares.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/played/{period}</span><div class="desc">Películas más reproducidas (semanal, mensual, anual, all).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/watched/{period}</span><div class="desc">Películas con más espectadores únicos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/collected/{period}</span><div class="desc">Películas más añadidas a colecciones.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/anticipated</span><div class="desc">Películas más esperadas (en Watchlists).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/boxoffice</span><div class="desc">Películas más taquilleras del fin de semana.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}</span><div class="desc">Detalles completos de una película (IDs, sinopsis, año, etc.).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/aliases</span><div class="desc">Títulos alternativos en otros idiomas.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/releases</span><div class="desc">Fechas de estreno y certificaciones por país.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/translations/{language}</span><div class="desc">Traducciones de sinopsis y títulos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/comments/{sort}</span><div class="desc">Comentarios y críticas de los usuarios.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/lists/{type}/{sort}</span><div class="desc">Listas públicas que contienen esta película.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/people</span><div class="desc">Reparto (Cast) y equipo técnico (Crew).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/ratings</span><div class="desc">Desglose de calificaciones y porcentajes.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/stats</span><div class="desc">Estadísticas globales (vistas, coleccionados, comentarios).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/movies/{id}/studios</span><div class="desc">Estudios de producción cinematográfica.</div></div>
+
+<h2>Shows (Series de Televisión)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/trending</span><div class="desc">Series en tendencia en tiempo real.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/popular</span><div class="desc">Series más populares.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/played/{period}</span><div class="desc">Series con más episodios reproducidos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/watched/{period}</span><div class="desc">Series con más espectadores únicos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/collected/{period}</span><div class="desc">Series más añadidas a colecciones.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/anticipated</span><div class="desc">Series más esperadas en watchlists.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}</span><div class="desc">Información detallada de una serie.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/aliases</span><div class="desc">Nombres alternativos de la serie.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/translations/{language}</span><div class="desc">Traducciones de la información de la serie.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/comments/{sort}</span><div class="desc">Reseñas y comentarios de la comunidad.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/certification</span><div class="desc">Clasificación por edades (TV-MA, PG-13, etc.).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/lists/{type}/{sort}</span><div class="desc">Listas que incluyen esta serie.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/people</span><div class="desc">Actores, directores y creadores.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/ratings</span><div class="desc">Calificaciones de los usuarios.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/stats</span><div class="desc">Estadísticas completas de reproducción.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/studios</span><div class="desc">Cadenas de televisión o plataformas de origen (Networks/Studios).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/next_episode</span><div class="desc">Siguiente episodio al aire (útil si estás al día).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/last_episode</span><div class="desc">Último episodio emitido.</div></div>
+
+<h2>Seasons & Episodes (Temporadas y Episodios)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons</span><div class="desc">Lista todas las temporadas de una serie con sus metadatos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}</span><div class="desc">Lista todos los episodios de una temporada específica.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/comments</span><div class="desc">Comentarios de una temporada completa.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/ratings</span><div class="desc">Calificaciones de la temporada.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/episodes/{episode}</span><div class="desc">Detalles completos de un episodio individual.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/episodes/{episode}/comments</span><div class="desc">Comentarios de un episodio específico.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/episodes/{episode}/ratings</span><div class="desc">Calificaciones de un episodio.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/shows/{id}/seasons/{season}/episodes/{episode}/stats</span><div class="desc">Estadísticas de visualización del episodio.</div></div>
+
+<h2>Checkin (Reproducción Manual Activa)</h2>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/checkin</span><div class="desc">Iniciar un check-in manual (indica que estás viendo algo ahora mismo).</div></div>
+<div class="endpoint-block"><span class="method delete">DELETE</span><span class="path">/checkin</span><div class="desc">Cancelar el check-in activo actual.</div></div>
+
+<h2>Scrobble (Sincronización Automatizada para Apps)</h2>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/scrobble/start</span><div class="desc">Iniciar la reproducción automática desde un media center (0% - 10%).</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/scrobble/pause</span><div class="desc">Pausar la reproducción del video.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/scrobble/stop</span><div class="desc">Finalizar la reproducción y guardarla en el historial (debe ser >80%).</div></div>
+
+<h2>Sync (Sincronización de Biblioteca y Progreso - Auth)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/last_activities</span><div class="desc">Obtener marcas de tiempo de las últimas acciones para optimizar caché.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/playback</span><div class="desc">Obtener estados de reproducción pausados a medias.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/history</span><div class="desc">Historial completo de visualización del usuario.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/history</span><div class="desc">Añadir ítems manualmente al historial de vistos.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/history/remove</span><div class="desc">Eliminar ítems del historial de vistos.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/collection</span><div class="desc">Lista de películas y episodios en la colección del usuario.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/collection</span><div class="desc">Añadir ítems a la colección.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/collection/remove</span><div class="desc">Eliminar ítems de la colección.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/watchlist</span><div class="desc">Lista de películas, series y episodios por ver (Watchlist).</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/watchlist</span><div class="desc">Añadir ítems a la Watchlist.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/sync/watchlist/remove</span><div class="desc">Remover ítems de la Watchlist.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/sync/recommendations</span><div class="desc">Recomendaciones personalizadas para el usuario.</div></div>
+
+<h2>Search (Buscador)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/search/{type}</span><div class="desc">Buscar por texto en títulos, descripciones (type: movie, show, episode, person, list).</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/search/id/{id_type}/{id}</span><div class="desc">Buscar directamente usando IDs externos (imdb, tmdb, tvdb, trakt).</div></div>
+
+<h2>Users & Lists (Usuarios y Listas Personalizadas)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/users/settings</span><div class="desc">Configuración del perfil del usuario autenticado.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/users/{username}/lists</span><div class="desc">Listas personalizadas creadas por el usuario.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/users/{username}/lists</span><div class="desc">Crear una nueva lista personalizada.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/users/{username}/lists/{id}/items</span><div class="desc">Obtener los elementos contenidos en una lista específica.</div></div>
+<div class="endpoint-block"><span class="method post">POST</span><span class="path">/users/{username}/lists/{id}/items</span><div class="desc">Añadir películas, series o episodios a una lista.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/users/{username}/stats</span><div class="desc">Estadísticas completas del usuario (tiempo total viendo TV, etc.).</div></div>
+
+<h2>Genres, Certifications & Countries (Catálogos Base)</h2>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/genres/movies</span><div class="desc">Lista completa de géneros válidos para películas.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/genres/shows</span><div class="desc">Lista completa de géneros válidos para series de TV.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/certifications/movies</span><div class="desc">Lista de clasificaciones de edades para películas por país.</div></div>
+<div class="endpoint-block"><span class="method get">GET</span><span class="path">/countries/movies</span><div class="desc">Lista de códigos de países soportados.</div></div>
+
+<div class="footer">
+    Documentación estructurada basada en la API v2 de Trakt.tv.
+</div>
+
+</body>
+</html>
