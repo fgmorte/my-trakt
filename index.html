@@ -62,7 +62,7 @@ input[type=checkbox]{width:auto;margin:0 10px 0 0}
 #intro .grid{position:absolute;z-index:1;left:-60%;right:-60%;bottom:0;height:38%;background:repeating-linear-gradient(90deg,rgba(255,107,154,.75) 0 2px,transparent 2px 56px),repeating-linear-gradient(0deg,rgba(255,107,154,.75) 0 2px,transparent 2px 36px);transform:perspective(260px) rotateX(62deg);transform-origin:bottom;animation:gridm .6s linear infinite}
 #intro .ttl{font:900 46px Impact,"Arial Black",sans-serif;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #ff6b9a,0 0 18px #ff2e7e,0 0 40px #ff2e7e;animation:flick 1.6s both}
 #intro .sub2{font:700 12px "Trebuchet MS",sans-serif;letter-spacing:3px;color:#efebf5;animation:fadei .6s .6s both}
-#intro .play{font:700 18px "Trebuchet MS",sans-serif;color:#16131d;background:#ff6b9a;padding:6px 18px;border-radius:4px;box-shadow:0 0 16px #ff2e7e;animation:fadei .3s 1s both,blink .6s steps(2) 1.3s 2;border:0;cursor:pointer}
+#intro .play{font:700 18px "Trebuchet MS",sans-serif;color:#16131d;background:#ff6b9a;padding:6px 18px;border-radius:4px;box-shadow:0 0 16px #ff2e7e;animation:fadei .3s 1s both,blink .6s steps(2) 1.3s 2}
 @keyframes gridm{to{background-position:0 0,0 36px}}
 @keyframes flick{0%{opacity:0}10%{opacity:1}14%{opacity:.2}18%{opacity:1}22%{opacity:.4}26%,100%{opacity:1}}
 @keyframes blink{50%{opacity:.25}}
@@ -85,78 +85,1040 @@ img[data-z]{cursor:zoom-in}
 .pv{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .it .pvi{width:28px;height:28px;border-radius:7px;opacity:.7;cursor:pointer}
 .it .pvi.on{opacity:.95}
-.pick{background:var(--card);border-radius:14px;padding:16px;width:min(86%,340px);display:flex;flex-direction:column;gap:8px;box-shadow:0 12px 30px rgba(0,0,0,.25)}
+.pvt{font-size:12px;color:var(--mu);border:1px solid var(--ln);border-radius:6px;padding:3px 8px;cursor:pointer}
+.pvt.on{color:var(--tx)}
+.b.pb{background:#0b0710;border-color:#2a2433;color:#efebf5}
+.b.pb:disabled{opacity:.35}
+.lb a.b{text-decoration:none}
+.pp[data-person]{cursor:pointer}
+.cr{display:flex;align-items:center;gap:6px;padding:4px 0}
+.cr span{flex:1;font-weight:700}
+.desc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+[data-ep],[data-tm]{cursor:pointer}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;border:1px solid var(--ac);color:var(--ac);margin:6px 6px 0 0}
+.pick{background:var(--card);border-radius:14px;padding:16px;width:min(86%,340px);display:flex;flex-direction:column;gap:8px;max-height:80%;overflow:auto}
+.pick .b{margin:0;padding:8px 12px;font-size:14px;text-align:left}
+.plat{font-size:12px;font-weight:700;color:var(--ac);margin-top:4px}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin:4px 0 14px}
+.seg{display:flex;background:var(--card);border-radius:99px;padding:3px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:none;color:var(--mu);padding:8px;border-radius:99px;font:inherit;font-weight:700}
+.seg button.on{background:var(--ac);color:var(--on)}
 </style>
 </head>
 <body>
+<div id="intro" aria-hidden="true"><div class="scan"></div><div class="sun"></div><div class="grid"></div><div class="ttl">MI TRAKT</div><div class="sub2">SERIES · PELÍCULAS · SESIÓN CONTINUA</div><div class="play">▶ PLAY</div></div>
+<main><h1 id="h">Mi Trakt</h1><div id="v"></div></main>
+<nav id="nav"></nav>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const ls={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const DEFAULT_CID='2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ';
+const DEFAULT_TMDB='1ecd17043eeaf60425225d378af33c0a';
+let cfg=Object.assign({cid:DEFAULT_CID,tmdb:DEFAULT_TMDB},ls.get('cfg')||{}), tok=ls.get('tok'), tab=tok?'prog':'cfg';
+if(!cfg.cid)cfg.cid=DEFAULT_CID;
+if(!cfg.tmdb)cfg.tmdb=DEFAULT_TMDB;
+const posters=ls.get('posters')||{};
+let WD=null,WM=null,navId=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let pq=0;const pw=[];
+async function slot(){if(pq>=6)await new Promise(r=>pw.push(r));pq++}
+function freeSlot(){pq--;const n=pw.shift();if(n)n()}
+const API='https://api.trakt.tv';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m,undo){
+  const t=$('#toast');t.textContent=m;t.style.pointerEvents=undo?'auto':'none';
+  if(undo){const b=document.createElement('button');b.textContent='Deshacer';b.style.cssText='margin-left:12px;border:0;background:none;color:var(--ac);font:inherit;font-weight:700';b.onclick=()=>{t.classList.remove('on');undo()};t.appendChild(b)}
+  t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),undo?6000:2000);
+}
 
-<div id="intro">
-  <div class="scan"></div>
-  <div class="sun"></div>
-  <div class="grid"></div>
-  <div class="ttl">MI TRAKT</div>
-  <div class="sub2">SERIES · PELÍCULAS · SESIÓN CONTINUA</div>
-  <button class="play" id="btn-login">▶ PLAY</button>
-</div>
+let rfp=null;
+function refreshTok(){
+  if(rfp)return rfp;
+  rfp=(async()=>{
+    if(!tok||!tok.refresh_token)return false;
+    try{
+      const r=await fetch(API+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:tok.refresh_token,client_id:cfg.cid,redirect_uri:'http://localhost',grant_type:'refresh_token'})});
+      if(!r.ok)return false;
+      tok=await r.json();ls.set('tok',tok);return true;
+    }catch(e){return false}
+  })().finally(()=>{rfp=null});
+  return rfp;
+}
+async function tr(path,opt={}){
+  const h={'Content-Type':'application/json','trakt-api-version':'2','trakt-api-key':cfg.cid};
+  if(tok)h.Authorization='Bearer '+tok.access_token;
+  if(opt.body&&path.startsWith('/sync/history')){WD=null;WM=null;PG.clear()}
+  let r;
+  for(let a=0;a<3;a++){
+    try{r=await fetch(API+path,{method:opt.body?'POST':'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined})}
+    catch(e){if(opt.body||a===2)throw new Error('No se pudo contactar con Trakt. Comprueba la conexión o inténtalo en unos minutos.');await sleep(900*(a+1));continue}
+    if(!opt.body&&a<2&&(r.status===429||r.status>=500)){await sleep((+r.headers.get('retry-after')||1)*1000*(a+1));continue}
+    break;
+  }
+  if(r.status===401&&tok&&!opt.retried&&await refreshTok())return tr(path,Object.assign({},opt,{retried:true}));
+  if(r.status===401&&tok){tok=null;ls.set('tok',null);const ae=new Error('Sesión caducada. Vuelve a conectar con Trakt.');ae.auth=true;throw ae}
+  if(!r.ok){const er=new Error('Trakt respondió '+r.status);er.status=r.status;throw er}
+  return r.json();
+}
+const TMX=ls.get('tmx3')||{};
+async function tmMeta(kind,tmdb){
+  const none={p:'',o:'',r:0,rd:'',bd:''};
+  if(!cfg.tmdb||!tmdb)return none;
+  const k=kind+tmdb;
+  if(TMX[k])return TMX[k];
+  await slot();
+  try{
+    const g=async lang=>{const r=await fetch(`https://api.themoviedb.org/3/${kind==='movie'?'movie':'tv'}/${tmdb}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${lang}`);return r.ok?r.json():null};
+    const d=await g('es-ES');
+    if(!d)return none;
+    if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
+    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||'',bd:d.backdrop_path?'https://image.tmdb.org/t/p/w300'+d.backdrop_path:''};
+    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx3',TMX),600);
+    return TMX[k];
+  }catch(e){return none}
+  finally{freeSlot()}
+}
+async function poster(kind,tmdb){return (await tmMeta(kind,tmdb)).p}
+const STL=ls.get('stl')||{};
+async function epStill(tmdb,sn,en){
+  const k=tmdb+':'+sn+':'+en;
+  if(STL[k]!==undefined)return STL[k];
+  if(!cfg.tmdb)return '';
+  await slot();
+  try{
+    const r=await fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${sn}/episode/${en}?api_key=${encodeURIComponent(cfg.tmdb)}`);
+    if(r.status===404)STL[k]='';
+    else if(!r.ok)return '';
+    else{const d=await r.json();STL[k]=d.still_path?'https://image.tmdb.org/t/p/w300'+d.still_path:''}
+    clearTimeout(epStill.t);epStill.t=setTimeout(()=>ls.set('stl',STL),600);
+    return STL[k];
+  }catch(x){return ''}
+  finally{freeSlot()}
+}
 
-<main>
-  <h1 id="app-title">Mi Trakt</h1>
-  <div class="sec" id="sec-title">Cargando novedades...</div>
-  <div id="fl"></div>
-</main>
+// Normaliza cualquier respuesta de Trakt a {kind,o,ep,date}
+function norm(x){
+  if(x.episode&&x.show)return{kind:'episode',o:x.show,ep:x.episode,date:x.watched_at||x.first_aired};
+  if(x.movie)return{kind:'movie',o:x.movie,date:x.watched_at||x.listed_at};
+  if(x.show)return{kind:'show',o:x.show,date:x.listed_at};
+  return null;
+}
+const fmt=d=>d?new Date(d).toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric'}):'';
 
-<div id="toast">Mensaje en pantalla</div>
+let items=[];
+async function tmdbInfo(kind,id){
+  if(!cfg.tmdb||!id)return null;
+  try{const r=await fetch(`https://api.themoviedb.org/3/${kind}/${id}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${encodeURIComponent(navigator.language||'es-ES')}&append_to_response=credits`);return r.ok?await r.json():null}catch(e){return null}
+}
+const JOBES={Director:'Dirección',Writer:'Guion',Screenplay:'Guion','Executive Producer':'Productor/a ejecutivo/a',Producer:'Producción','Original Music Composer':'Música','Director of Photography':'Fotografía'};
+function tabsHtml(tm,isM){
+  if(!tm)return '';
+  const person=(nm,sub,pp,id)=>`<div class="pp" data-person="${id||''}">${pp?`<img src="https://image.tmdb.org/t/p/w92${pp}" alt="" loading="lazy">`:'<div class="av"></div>'}<div><b>${esc(nm)}</b><span>${esc(sub||'')}</span></div></div>`;
+  const cr=tm.credits||{},cast=(cr.cast||[]).slice(0,24).map(c=>person(c.name,c.character,c.profile_path,c.id)).join('');
+  const seen=new Set(),eq=[];
+  (tm.created_by||[]).forEach(c=>eq.push(person(c.name,'Creación',c.profile_path,c.id)));
+  (cr.crew||[]).filter(c=>JOBES[c.job]).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path,c.id))}});
+  const rows=[],li=(t,v)=>{if(v)rows.push(`<div class="kv"><span>${t}</span>${v}</div>`)};
+  const names=a=>(a||[]).map(x=>esc(x.name)).join(', ');
+  li('Productoras',names(tm.production_companies));li('Cadenas',names(tm.networks));
+  li('Países',names(tm.production_countries)||esc((tm.origin_country||[]).join(', ')));
+  li('Idioma original',esc(tm.original_language||''));li('Estado',esc(tm.status||''));
+  if(isM){li('Estreno',fmt(tm.release_date));li('Presupuesto',tm.budget?'$'+tm.budget.toLocaleString('es'):'');li('Recaudación',tm.revenue?'$'+tm.revenue.toLocaleString('es'):'')}
+  else{li('Primera emisión',fmt(tm.first_air_date));li('Última emisión',fmt(tm.last_air_date));li('Temporadas',tm.number_of_seasons);li('Episodios',tm.number_of_episodes)}
+  if(/^https:\/\//.test(tm.homepage||''))li('Web oficial',`<a href="${esc(tm.homepage)}" target="_blank" rel="noopener noreferrer">${esc(tm.homepage)}</a>`);
+  const E=t=>`<div class="msg">${t}</div>`;
+  return `<div class="box"><div class="seg"><button data-tb="0" class="on">Reparto</button><button data-tb="1">Equipo</button><button data-tb="2">Producción</button></div>
+  <div data-pane="0">${cast||E('Sin datos de reparto.')}</div><div data-pane="1" hidden>${eq.join('')||E('Sin datos del equipo.')}</div><div data-pane="2" hidden>${rows.join('')||E('Sin datos de producción.')}</div></div>`;
+}
+const wcount=x=>(x.seasons||[]).filter(q=>q.number>0).reduce((t,q)=>t+q.episodes.length,0);
+const isComplete=x=>{const a=x.show.aired_episodes;return a>0&&wcount(x)>=a};
+const progPath=id=>`/shows/${id}/progress/watched`;
+const PG=new Map();
+async function progOf(id){
+  const c=PG.get(id);if(c&&Date.now()-c.t<3e5)return c.p;
+  const p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});return p;
+}
+const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
+async function fillPoster(el){
+  const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),idx=+el.dataset.o,m=await tmMeta(k,id);
+  const d=it&&it.querySelector('.desc');if(d&&m.o)d.textContent=m.o;
+  let u=m.p;
+  if(el.dataset.ps&&id){const ps=el.dataset.ps.split(':');u=(await epStill(id,ps[0],ps[1]))||m.bd||m.p}
+  if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
+  const n=items[idx];
+  if(n&&n.unres){try{await ensure(n);syncBtns(it,n)}catch(e){}}
+  const pb=it&&it.querySelector('[data-a="play"]');
+  if(pb&&id){
+    const names=await platNames(k,id,n&&n.o&&n.o.network),ok=isReleased(n,m)&&names.some(isMine);
+    if(n&&n.vod){pb.hidden=false;pb.disabled=!ok}else pb.hidden=!ok;
+  }
+}
+const pio='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){pio.unobserve(e.target);fillPoster(e.target)}}),{rootMargin:'300px'}):null;
+function loadPosters(){
+  document.querySelectorAll('[data-p]:not([data-w])').forEach(el=>{el.dataset.w=1;pio?pio.observe(el):fillPoster(el)});
+}
+/* ===== Estado y utilidades ===== */
+const WATCH=['seen','Visto'];
+const PLAYLBL='<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="#ff6b9a"/></svg>Play';
+const PLAY=['play',PLAYLBL,'pb',1];
+const SHARE=['share','↗ Compartir'];
+const PLAYV=['play',PLAYLBL,'pb',0,1];
+const SEEN={s:new Set(),c:new Set(),m:new Set()};
+const WL={s:new Set(),m:new Set(),ok:false};
+const LS2={hist:{shows:[],movies:[],seg:'show',q:''},wl:{shows:[],movies:[],seg:'show',q:''}};
+const CAL={seg:'c'};
+let detailOpen=false,dpush=0,lastBack=0;
+const ENDED=x=>/ended|canceled/i.test((x.show&&x.show.status)||'');
+const byDesc=k=>(a,b)=>(b[k]||'').localeCompare(a[k]||'');
+async function trAll(path,lim=100){
+  const out=[],seen=new Set();
+  for(let p=1;p<=40;p++){
+    const j=await tr(`${path}${path.includes('?')?'&':'?'}page=${p}&limit=${lim}`);
+    if(!Array.isArray(j)||!j.length)break;
+    let add=0;
+    for(const x of j){const k=JSON.stringify((x.show||x.movie||x).ids);if(!seen.has(k)){seen.add(k);out.push(x);add++}}
+    if(!add||j.length<lim)break;
+  }
+  return out;
+}
+const CD=ls.get('cdone')||{};
+async function verifyDone(sl){
+  const need=sl.filter(n=>n.chk&&!(CD[n.o.ids.trakt]&&Date.now()-CD[n.o.ids.trakt].t<6048e5));
+  for(let i=0;i<need.length;i+=5)await Promise.all(need.slice(i,i+5).map(async n=>{
+    try{const p=await progOf(n.o.ids.trakt);CD[n.o.ids.trakt]={c:p.aired>0&&p.completed>=p.aired?1:0,t:Date.now()}}catch(e){}
+  }));
+  if(need.length)ls.set('cdone',CD);
+  return sl.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c)).map(n=>{if(n.chk)n.sdone=true;return n});
+}
+async function watchedMovies(){
+  if(WM&&Date.now()-WM.t<3e5)return WM.d;
+  const d=await trAll('/sync/watched/movies');WM={t:Date.now(),d};return d;
+}
+async function watchedShows(){
+  if(WD&&Date.now()-WD.t<3e5)return WD.d;
+  const d=await trAll('/sync/watched/shows?extended=full',50);WD={t:Date.now(),d};return d;
+}
+function setSeen(w,wm){
+  SEEN.s=new Set(w.map(x=>x.show.ids.trakt));
+  SEEN.c=new Set(w.filter(isComplete).map(x=>x.show.ids.trakt));
+  SEEN.m=new Set(wm.map(x=>x.movie.ids.trakt));
+}
+async function loadSeen(){const [w,wm]=await Promise.all([watchedShows(),watchedMovies()]);setSeen(w,wm)}
+async function loadWL(){
+  if(WL.ok)return;
+  const [a,b]=await Promise.all([trAll('/sync/watchlist/shows'),trAll('/sync/watchlist/movies')]);
+  WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
+}
+const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
+const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
+const showSeenBtn=n=>(n.sdone!==undefined?n.sdone:SEEN.c.has(n.o.ids.trakt))?['ss','✓ Visto','f']:['ss','Visto'];
+function btnsFor(n){
+  const out=[];
+  if(!n.noFollow)out.push(FOLLOW(n));
+  out.push(n.kind==='movie'?seenBtn(n):n.kind==='episode'?['seen','Visto']:showSeenBtn(n));
+  out.push(n.vod?PLAYV:PLAY);
+  return out;
+}
+const TMAP=ls.get('tmap')||{};
+async function ensure(n){
+  if(!n.unres)return n;
+  const t=n.tv?'show':'movie',tmdb=n.o.ids.tmdb,k=t+tmdb;
+  let o=TMAP[k];
+  if(!o){
+    const r=await tr(`/search/tmdb/${tmdb}?type=${t}`),f=r.find(x=>x[t]);
+    if(!f)throw new Error('Sin ficha en Trakt');
+    const q=f[t];o={title:q.title,year:q.year,ids:q.ids};
+    TMAP[k]=o;clearTimeout(ensure.t);ensure.t=setTimeout(()=>ls.set('tmap',TMAP),600);
+  }
+  n.o=Object.assign({},o,{ids:Object.assign({},o.ids,{tmdb})});n.unres=false;
+  return n;
+}
+function syncBtns(it,n){
+  if(!it||!n.o||!n.o.ids.trakt)return;
+  const set=(a,txt,f)=>{const b=it.querySelector(`[data-a="${a}"]`);if(b){b.textContent=txt;b.classList.toggle('f',f)}};
+  const id=n.o.ids.trakt,isM=n.kind==='movie',fol=(isM?WL.m:WL.s).has(id);
+  if(isM){const on=SEEN.m.has(id);set('sw',on?'✓ Visto':'Visto',on)}
+  else{const on=n.sdone!==undefined?n.sdone:SEEN.c.has(id);set('ss',on?'✓ Visto':'Visto',on)}
+  set('follow',fol?'✓ Siguiendo':'+ Seguir',fol);
+}
+const HOME={'Netflix':'https://www.netflix.com/browse','Prime Video':'https://www.primevideo.com/','Disney+':'https://www.disneyplus.com/','Max':'https://www.max.com/','Apple TV+':'https://tv.apple.com/','Movistar Plus+':'https://ver.movistarplus.es/','SkyShowtime':'https://www.skyshowtime.com/','Filmin':'https://www.filmin.es/','Crunchyroll':'https://www.crunchyroll.com/','Rakuten TV':'https://rakuten.tv/es','Atresplayer':'https://www.atresplayer.com/','RTVE Play':'https://www.rtve.es/play/','Mitele':'https://www.mitele.es/','YouTube':'https://www.youtube.com/','Pluto TV':'https://pluto.tv/es','Plex':'https://watch.plex.tv/','Samsung TV Plus':'https://www.samsungtvplus.com/'};
+function openPlatform(co){
+  const D=window._d,t=D&&D.n?tgtFor(D.n):null,c=t&&WS_CACHE.get(t.paths.join('|'));
+  const hit=c&&c.v.list.find(q=>company(q.name)===co);
+  const url=(hit&&hit.url)||HOME[co];
+  if(url)window.open(url,'_blank','noopener');else toast('No tengo el enlace de '+co);
+}
+async function shareItem(n,pre){
+  if(pre){
+    if(navigator.share){try{await navigator.share(pre)}catch(e){}}
+    else{try{await navigator.clipboard.writeText(pre.text+'\n'+pre.url);toast('Copiado para compartir')}catch(e){toast(pre.url)}}
+    return;
+  }
+  const o=n.o,tm=o.ids.tmdb,isM=n.kind==='movie',m=(typeof TMX!=='undefined'&&TMX[(isM?'movie':'tv')+tm])||{};
+  const url=o.ids.slug?`https://trakt.tv/${isM?'movies':'shows'}/${o.ids.slug}`:tm?`https://trakt.tv/search/tmdb/${tm}?id_type=${isM?'movie':'show'}`:'https://trakt.tv';
+  const text=`${o.title}${o.year?' ('+o.year+')':''}${m.r?' · ★ '+m.r.toFixed(1):''}${m.o?'\n'+m.o.slice(0,200):''}`;
+  if(navigator.share){try{await navigator.share({title:o.title,text,url})}catch(e){}}
+  else{try{await navigator.clipboard.writeText(text+'\n'+url);toast('Copiado para compartir')}catch(e){toast(url)}}
+}
+const seenBtn=n=>SEEN.m.has(n.o.ids.trakt)?['sw','✓ Visto','f']:['sw','Visto'];
+function fail(err,el){
+  if(err.auth){tab='cfg';setNav();$('#h').textContent='Ajustes';cfgView();toast(err.message);return}
+  el.innerHTML=`<div class="msg">${esc(err.message)}<br><button class="b f" id="retry">Reintentar</button></div>`;
+  $('#retry').onclick=()=>go(tab);
+}
 
-<nav>
-  <button class="on" id="nav-trends">
-    <span class="ic">
-      <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-    </span>
-    Tendencias
-  </button>
-  <button id="btn-logout" hidden>
-    <span class="ic">
-      <svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-    </span>
-    Salir
-  </button>
-</nav>
+/* ===== Tarjeta ===== */
+function card(n,btns,idx){
+  const o=n.o,pad=x=>String(x).padStart(2,'0');
+  const sub=n.sub||(n.kind==='episode'?`T${pad(n.ep.season)} | E${pad(n.ep.number)}`:n.kind==='movie'?'Película':'Serie');
+  const ept=n.kind==='episode'&&n.ep.title?`<div class="s">${esc(n.ep.title)}</div>`:'';
+  const air=n.air!==undefined?`<div class="s" data-air="${idx}">${n.air?'Estreno: '+fmt(n.air):''}</div>`:'';
+  const bar=n.pct!=null?`<div class="bar"><i style="width:${n.pct}%"></i></div>`:'';
+  const bt=btns.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${idx}"${b[3]?' hidden':''}${b[4]?' disabled':''}>${b[1]}</button>`).join('');
+  return `<div class="it" data-ci="${idx}"><div class="lc${n.kind==='episode'?' w':''}"><div class="ph" data-o="${idx}" data-p="${n.kind==='movie'?'movie':'tv'}:${o.ids.tmdb||''}"${n.kind==='episode'?` data-ps="${n.ep.season}:${n.ep.number}"`:''}></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${idx}">${esc(o.title)}${n.kind==='episode'?'':` <span class="s">${o.year||''}</span>`}</div><div class="sub">${esc(sub)}</div>${ept}${air}${bar}<div class="s">${n.extra||fmt(n.date)}</div><div class="s desc"></div></div></div>`;
+}
 
-<script type="module">
-const CONFIG = {
-  clientId: '2dFp8k9VZWx3_XvbbQM06P1QBG9TcB-LGik30OrzWuQ', // Añade tu Client ID de Trakt aquí
-  baseUrl: 'https://api.trakt.tv',
-  redirectUri: window.location.origin + window.location.pathname,
-  country: 'es'
+/* ===== Plataformas (etiqueta en Próximos) ===== */
+const PV=ls.get('prov')||{};
+async function wmNames(kind,tmdb){
+  try{
+    const f=kind==='movie'?'tmdb_movie_id':'tmdb_tv_id',k=encodeURIComponent(cfg.wm);
+    const r=await fetch(`https://api.watchmode.com/v1/search/?apiKey=${k}&search_field=${f}&search_value=${tmdb}`);
+    if(!r.ok)return [];
+    const t=((await r.json()).title_results||[])[0];if(!t)return [];
+    const r2=await fetch(`https://api.watchmode.com/v1/title/${t.id}/sources/?apiKey=${k}&regions=${cfg.country||'ES'}`);
+    if(!r2.ok)return [];
+    return [...new Set((await r2.json()).filter(x=>x.type==='sub'||x.type==='free').map(x=>x.name))];
+  }catch(e){return []}
+}
+const COMP=[[/prime video|amazon video|amazon prime/i,'Prime Video'],[/netflix/i,'Netflix'],[/disney/i,'Disney+'],[/\bmax\b|hbo/i,'Max'],[/apple tv/i,'Apple TV+'],[/movistar/i,'Movistar Plus+'],[/skyshowtime/i,'SkyShowtime'],[/filmin/i,'Filmin'],[/crunchyroll/i,'Crunchyroll'],[/rakuten/i,'Rakuten TV'],[/atresplayer/i,'Atresplayer'],[/rtve/i,'RTVE Play'],[/mitele/i,'Mitele'],[/youtube/i,'YouTube'],[/pluto/i,'Pluto TV'],[/plex/i,'Plex'],[/samsung/i,'Samsung TV Plus']];
+function company(name){
+  for(const [re,c] of COMP)if(re.test(name))return c;
+  return name.replace(/\b(with ads|basic with ads|standard with ads|amazon channel|apple tv channel|free)\b/ig,'').replace(/\s+/g,' ').trim()||name;
+}
+const PV2=ls.get('prov2')||{};
+async function platInfo(kind,tmdb,fallback){
+  const k=kind+tmdb,c=PV2[k],fb=fallback?[{n:company(fallback),l:''}]:[];
+  if(c&&Date.now()-c.t<2592e5)return c.i;
+  let list=[];
+  if(cfg.tmdb){
+    try{
+      const r=await fetch(`https://api.themoviedb.org/3/${kind}/${tmdb}/watch/providers?api_key=${encodeURIComponent(cfg.tmdb)}`);
+      if(!r.ok)return fb;
+      const d=await r.json(),z=d.results&&d.results[cfg.country||'ES'];
+      const g=new Map();
+      for(const q of [...((z&&z.flatrate)||[]),...((z&&z.free)||[]),...((z&&z.ads)||[])]){
+        const co=company(q.provider_name),cur=g.get(co);
+        if(!cur||q.provider_name.length<cur.src.length)g.set(co,{n:co,l:q.logo_path||'',src:q.provider_name});
+      }
+      list=[...g.values()].map(x=>({n:x.n,l:x.l}));
+    }catch(e){return fb}
+  }
+  if(!list.length&&cfg.wm){const seen=new Set();list=(await wmNames(kind,tmdb)).map(company).filter(n=>!seen.has(n)&&seen.add(n)).map(n=>({n,l:''}))}
+  if(!list.length)list=fb;
+  PV2[k]={t:Date.now(),i:list};
+  clearTimeout(platInfo.t);platInfo.t=setTimeout(()=>ls.set('prov2',PV2),600);
+  return list;
+}
+async function platNames(kind,tmdb,fallback){return (await platInfo(kind,tmdb,fallback)).map(x=>x.n)}
+const isMine=nm=>{const x=normN(company(nm));return (cfg.plats||[]).map(normN).some(m=>m&&(x.includes(m)||m.includes(x)))};
+function observePl(){}
+function isReleased(n,m){
+  if(!n||n.kind==='episode')return true;
+  const d=n.rel||(m&&m.rd);
+  return !d||new Date(d)<=new Date();
+}
+
+/* ===== Scroll infinito ===== */
+let feedTok=0,feedIO=null;
+function startFeed(root,src,o){
+  const my=++feedTok;items=[];
+  if(feedIO)feedIO.disconnect();
+  root.innerHTML='<div id="fl"></div><div id="fs" class="msg"></div>';
+  const fl=$('#fl'),fs=$('#fs');let pos=0,busy=false;
+  if(!src.length){fs.textContent=o.empty||'No hay nada que mostrar.';return}
+  async function more(){
+    if(busy||my!==feedTok||pos>=src.length)return;
+    busy=true;fs.textContent='Cargando más…';
+    let its;
+    try{its=await o.prep(src.slice(pos,pos+o.size))}
+    catch(err){if(my===feedTok){busy=false;fail(err,fs)}return}
+    if(my!==feedTok)return;
+    pos+=o.size;
+    fl.insertAdjacentHTML('beforeend',its.map(n=>{items.push(n);const i=items.length-1;return o.html?o.html(n,i):card(n,o.btns(n),i)}).join(''));
+    loadPosters();observePl();if(o.after)o.after();
+    busy=false;
+    if(pos>=src.length){fs.textContent=items.length?'':(o.empty||'No hay nada que mostrar.');feedIO.disconnect();if(o.done)o.done()}
+    else{fs.textContent='';feedIO.unobserve(fs);feedIO.observe(fs)}
+  }
+  feedIO=new IntersectionObserver(es=>{if(es[0].isIntersecting)more()},{rootMargin:'500px'});
+  feedIO.observe(fs);more();
+}
+
+/* ===== Siguiente ===== */
+const mkProg=(show,p)=>({kind:'episode',o:show,ep:p.next_episode,date:null,pl:true,air:p.next_episode.first_aired||'',pct:p.aired?Math.round(p.completed/p.aired*100):0,extra:p.completed?`${p.completed} de ${p.aired} episodios vistos · último: ${fmt(p.last_watched_at)}`:'Pendiente de empezar'});
+async function progBatch(sl){
+  const res=[];
+  for(let i=0;i<sl.length;i+=5)res.push(...await Promise.all(sl.slice(i,i+5).map(x=>progOf(x.show.ids.trakt).then(p=>({show:x.show,p})).catch(()=>null))));
+  return res.filter(r=>r&&r.p.next_episode&&r.p.completed<r.p.aired).map(r=>mkProg(r.show,r.p));
+}
+async function fillAir(){
+  const snap=items,todo=items.map((n,i)=>[n,i]).filter(([n])=>n.kind==='episode'&&n.air===''&&!n.aq);
+  todo.forEach(([n])=>{n.aq=1});
+  for(let k=0;k<todo.length;k+=5){
+    await Promise.all(todo.slice(k,k+5).map(async([n,i])=>{
+      try{
+        const e=await tr(`/shows/${n.o.ids.trakt}/seasons/${n.ep.season}/episodes/${n.ep.number}?extended=full`);
+        n.air=e.first_aired||null;
+        const el=document.querySelector(`[data-air="${i}"]`);if(el&&e.first_aired)el.textContent='Estreno: '+fmt(e.first_aired);
+      }catch(err){}
+    }));
+    if(items!==snap)return;
+  }
+}
+async function refreshProg(i){
+  const n=items[i];
+  if(!n||tab!=='prog')return go('prog');
+  const id=n.o.ids.trakt,p=await tr(progPath(id));PG.set(id,{t:Date.now(),p});delete CD[id];
+  const el=document.querySelector(`.it[data-ci="${i}"]`);
+  if(p.next_episode&&p.completed<p.aired){
+    const nn=mkProg(n.o,p);items[i]=nn;
+    if(el){el.outerHTML=card(nn,btnsFor(nn),i);loadPosters();observePl();fillAir()}else go('prog');
+  }else if(el)el.remove();
+}
+
+/* ===== Listas Pendientes / Vistos ===== */
+function listBtns(mode,n){return btnsFor(n)}
+function paintList(mode){
+  const S=LS2[mode],q=S.q.trim().toLowerCase();
+  const src=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
+  document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===S.seg));
+  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),after:observePl,done:()=>{if(mode==='hist'&&S.seg==='show'&&!q){const b=document.querySelector('[data-sg="show"]');if(b)b.textContent='Series ('+items.length+')'}},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
+}
+function listShell(mode){
+  const S=LS2[mode];
+  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">${mode==='hist'?'Series':'Series ('+S.shows.length+')'}</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tu lista o en Trakt" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
+  $('#hq').addEventListener('input',e=>{S.q=e.target.value;paintList(mode)});
+  $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchList(mode,e.target.value)});
+  paintList(mode);
+}
+async function searchList(mode,q){
+  q=q.trim();if(!q)return;
+  const hl=$('#hl');hl.innerHTML='<div class="msg">Buscando…</div>';
+  try{
+    const d=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=20`)).map(norm).filter(Boolean).map(n=>{
+      const id=n.o.ids.trakt,isM=n.kind==='movie';
+      n.extra=mode==='hist'?(isM?(SEEN.m.has(id)?'✓ Ya la has visto':'Sin ver'):(SEEN.c.has(id)?'✓ Serie completa':SEEN.s.has(id)?'En curso: aparece en En Progreso':'Sin ver')):((isM?WL.m:WL.s).has(id)?'✓ Ya la sigues':'No la sigues');
+      return n;
+    });
+    hl.innerHTML='<div class="box"><button class="b" id="bk">← Volver a mi lista</button></div><div id="hr"></div>';
+    startFeed($('#hr'),d,{size:20,prep:async a=>a,btns:btnsFor,empty:'Sin resultados en Trakt.'});
+  }catch(err){fail(err,hl)}
+}
+
+/* ===== Estrenos ===== */
+const TMDB='https://api.themoviedb.org/3/';
+async function tmdbGet(path,q){
+  try{
+    const r=await fetch(`${TMDB}${path}?api_key=${encodeURIComponent(cfg.tmdb)}&language=es-ES&region=ES&${q}`);
+    return r.ok?await r.json():null;
+  }catch(e){return null}
+}
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function tmItem(m,tv,extra){
+  const date=(tv?m.first_air_date:m.release_date)||'',y=date.slice(0,4);
+  return {kind:tv?'show':'movie',tv,unres:true,vod:true,date,rel:date,extra:extra||('Estreno: '+fmt(date)),o:{title:(tv?m.name:m.title)||'',year:y?+y:undefined,ids:{tmdb:m.id}}};
+}
+const ES={vod:null,cine:null,vt:0,ct:0,q:''};
+async function cineList(){
+  const jobs=[];
+  for(let p=1;p<=5;p++)jobs.push(tmdbGet('movie/now_playing','page='+p).then(d=>((d&&d.results)||[]).map(m=>Object.assign(tmItem(m,false),{grp:'now',gname:'En cartelera'}))));
+  for(let p=1;p<=3;p++)jobs.push(tmdbGet('movie/upcoming','page='+p).then(d=>((d&&d.results)||[]).map(m=>Object.assign(tmItem(m,false),{grp:'up',gname:'Próximamente'}))));
+  const seen=new Set();
+  return (await Promise.all(jobs)).flat().filter(x=>!seen.has(x.o.ids.tmdb)&&seen.add(x.o.ids.tmdb));
+}
+function cineBar(){
+  const cs=cfg.cities||[],g=q=>`https://www.google.com/search?q=${encodeURIComponent(q)}&hl=es&gl=es`;
+  const row=c=>`<div class="cr"><span>${esc(c)}</span><a class="b" href="${g('cartelera '+c)}" target="_blank" rel="noopener">Por películas</a><a class="b" href="${g('cines '+c+' horarios')}" target="_blank" rel="noopener">Por salas</a></div>`;
+  return `<div class="box"><div class="sub">Cartelera por ciudad</div><div class="s" style="margin:4px 0 6px">${cs.length?'Se abre en Google, que ordena el resultado por películas y por salas:':'Elige tus ciudades en Ajustes.'}</div>${cs.map(row).join('')}</div>`;
+}
+function paintEs(){
+  const cf=$('#cf');if(!cf)return;
+  const cine=CAL.seg==='c',q=ES.q.trim().toLowerCase(),base=(cine?ES.cine:ES.vod)||[];
+  const src=base.filter(n=>!q||n.o.title.toLowerCase().includes(q));
+  let last='';
+  src.forEach(n=>{n.head=n.gname&&n.grp!==last?n.gname:'';if(n.gname)last=n.grp});
+  document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
+  $('#cb').innerHTML=cine?cineBar():'';
+  startFeed(cf,src,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>(n.head?`<div class="sec">${n.head}</div>`:'')+card(n,btnsFor(n),i),empty:q?'Ninguna coincidencia. Pulsa Intro para buscar.':(cine?'No se pudo cargar la cartelera.':'No hay estrenos nuevos en plataformas.')});
+}
+async function esSearch(q){
+  q=q.trim();if(!q||!$('#cf'))return;
+  const cf=$('#cf');cf.innerHTML='<div class="msg">Buscando…</div>';
+  try{
+    const d=await tmdbGet('search/multi','query='+encodeURIComponent(q));
+    const list=((d&&d.results)||[]).filter(x=>x.media_type==='movie'||x.media_type==='tv').map(x=>tmItem(x,x.media_type==='tv'));
+    cf.innerHTML='<div class="box"><button class="b" id="bk">← Volver</button></div><div id="cr2"></div>';
+    startFeed($('#cr2'),list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
+  }catch(err){fail(err,cf)}
+}
+async function calRun(){
+  const my=navId,box=$('#cl');
+  if(!cfg.tmdb){box.innerHTML='<div class="msg">Falta la clave de TMDB en Ajustes.</div>';return}
+  box.innerHTML='<div id="cb"></div><div id="cf"><div class="msg">Cargando…</div></div>';
+  document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
+  try{
+    const old=t=>Date.now()-t>6e5;
+    if(!ES.cine||old(ES.ct)){ES.cine=await cineList();ES.ct=Date.now()}
+    if(my!==navId)return;
+    paintEs();
+  }catch(err){fail(err,box)}
+}
+
+/* ===== Descubrir ===== */
+async function discRun(mode,q){
+  const r=$('#r');r.innerHTML='<div class="msg">Cargando…</div>';
+  try{
+    let list;
+    if(mode==='t'){
+      const [m,s]=await Promise.all([tr('/movies/trending?limit=40'),tr('/shows/trending?limit=40')]);
+      list=[];for(let i=0;i<40;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
+      list=list.map(norm).filter(Boolean);
+    }else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
+    startFeed(r,list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
+  }catch(err){fail(err,r)}
+}
+
+/* ===== Vistas ===== */
+const views={
+  async prog(){
+    const my=navId,w=await watchedShows();
+    if(my!==navId)return;
+    const st=w.filter(x=>!isComplete(x)).sort(byDesc('last_watched_at')).map(x=>({show:x.show}));
+    startFeed($('#v'),st,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:'Estás al día con todas tus series. 🎉'});
+  },
+  async wl(){
+    const my=navId;
+    const [a,b,w,wm]=await Promise.all([trAll('/sync/watchlist/shows'),trAll('/sync/watchlist/movies'),watchedShows(),watchedMovies()]);
+    if(my!==navId)return;
+    setSeen(w,wm);WL.s=new Set(a.map(x=>x.show.ids.trakt));WL.m=new Set(b.map(x=>x.movie.ids.trakt));WL.ok=true;
+    const wmap=new Map(w.map(x=>[x.show.ids.trakt,x])),rows=[];
+    a.forEach(x=>{
+      const wx=wmap.get(x.show.ids.trakt);
+      if(wx&&(!isComplete(wx)||ENDED(wx)))return;
+      rows.push({kind:'show',o:x.show,ts:x.listed_at,date:x.listed_at,pl:true,extra:wx?'Esperando nueva temporada · último: '+fmt(wx.last_watched_at):'Sin empezar · añadida el '+fmt(x.listed_at)});
+    });
+    w.forEach(x=>{if(isComplete(x)&&!ENDED(x)&&!WL.s.has(x.show.ids.trakt))rows.push({kind:'show',o:x.show,ts:x.last_watched_at,date:x.last_watched_at,noFollow:true,pl:true,extra:'Esperando nueva temporada · último: '+fmt(x.last_watched_at)})});
+    const S=LS2.wl;
+    S.shows=rows.sort(byDesc('ts'));
+    S.movies=b.map(x=>({kind:'movie',o:x.movie,ts:x.listed_at,date:x.listed_at,pl:true,extra:'Añadida el '+fmt(x.listed_at)})).sort(byDesc('ts'));
+    listShell('wl');
+  },
+  async cal(){
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="eq" type="search" placeholder="Buscar en estrenos" enterkeyhint="search" value="${esc(ES.q)}"></div><div id="cl"></div>`;
+    $('#eq').addEventListener('input',e=>{ES.q=e.target.value;paintEs()});
+    $('#eq').addEventListener('keydown',e=>{if(e.key==='Enter')esSearch(e.target.value)});
+    await Promise.all([loadWL(),loadSeen()]).catch(()=>{});
+    await calRun();
+  },
+  async disc(){
+    const my=navId;
+    await loadWL().catch(()=>{});
+    if(my!==navId)return;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim())discRun('s',e.target.value)});
+    await discRun('t');
+  },
+  async hist(){
+    const my=navId,[w,wm]=await Promise.all([watchedShows(),watchedMovies()]);
+    if(my!==navId)return;
+    setSeen(w,wm);
+    const S=LS2.hist;
+    S.shows=w.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'show',o:x.show,date:x.last_watched_at,chk:!isComplete(x),sub:'Serie completa',extra:(ENDED(x)?'Finalizada':'Al día · en emisión')+' · último: '+fmt(x.last_watched_at)}));
+    S.movies=wm.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
+    listShell('hist');
+  }
 };
 
-function generateCodeVerifier() {
-  const array = new Uint32Array(56);
-  window.crypto.getRandomValues(array);
-  return Array.from(array, dec => ('0' + dec.toString(16)).substr(-2)).join('');
+/* ===== Reproducir: enlaces de plataformas (Trakt watchnow y Watchmode) ===== */
+const WS_CACHE=new Map();
+const imgRe=/\.(png|jpe?g|webp|svg|gif)(\?|$)/i;
+function pickUrl(o){
+  for(const re of [/android/i,/direct/i,/^(link|url|deeplink|deep_link|web_url)$/i,/link|url/i])
+    for(const k in o)if(re.test(k)&&typeof o[k]==='string'&&/^https:\/\//i.test(o[k])&&!imgRe.test(o[k]))return o[k];
+  return '';
+}
+function collectSources(j){
+  const out=[],seen=new Set();
+  const walk=(v,tag)=>{
+    if(Array.isArray(v))return v.forEach(x=>walk(x,tag));
+    if(v&&typeof v==='object'){
+      const nm=v.name||v.source||v.provider||v.service,url=pickUrl(v);
+      if(nm&&typeof nm==='string'&&url&&!seen.has(nm+url)){seen.add(nm+url);out.push({name:nm,url,type:typeof tag==='string'?tag:''})}
+      for(const k in v)if(v[k]&&typeof v[k]==='object')walk(v[k],k);
+    }
+  };
+  walk(j,'');return out;
+}
+const normN=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
+function rankSources(list){
+  const mine=(cfg.plats||[]).map(normN);
+  list.forEach(s=>{const n=normN(s.name);s.mine=mine.some(m=>m&&(n.includes(m)||m.includes(n)))});
+  return list.sort((a,b)=>b.mine-a.mine);
+}
+async function traktSources(path){
+  const c=(cfg.country||'ES').toLowerCase();
+  try{return collectSources(await tr(`${path}/watchnow/${c}?links=android,direct`))}
+  catch(err){
+    if(err.status===400||err.status===422)return collectSources(await tr(`${path}/watchnow/${c}`));
+    throw err;
+  }
+}
+async function wmSources(tmdb,kind){
+  if(!cfg.wm||!tmdb)return [];
+  try{
+    const f=kind==='movie'?'tmdb_movie_id':'tmdb_tv_id',k=encodeURIComponent(cfg.wm);
+    const r=await fetch(`https://api.watchmode.com/v1/search/?apiKey=${k}&search_field=${f}&search_value=${tmdb}`);
+    if(!r.ok)return [];
+    const t=((await r.json()).title_results||[])[0];if(!t)return [];
+    const r2=await fetch(`https://api.watchmode.com/v1/title/${t.id}/sources/?apiKey=${k}&regions=${cfg.country||'ES'}`);
+    if(!r2.ok)return [];
+    return (await r2.json()).filter(x=>x.type==='sub'||x.type==='free').map(x=>{
+      const u=[x.android_url,x.web_url].find(v=>typeof v==='string'&&/^https:\/\//i.test(v));
+      return u?{name:x.name,url:u,type:x.type==='free'?'gratis':'suscripción'}:null;
+    }).filter(Boolean);
+  }catch(e){return []}
+}
+async function findLinks(t){
+  const key=t.paths.join('|'),c=WS_CACHE.get(key);
+  if(c&&Date.now()-c.t<6e5)return c.v;
+  let out=[],limited=false;
+  for(const p of t.paths){
+    try{out=await traktSources(p);if(out.length)break}
+    catch(err){if(err.auth)throw err;if(err.status===403)limited=true}
+  }
+  if(!out.length)out=await wmSources(t.tmdb,t.kind);
+  const v={list:rankSources(out),limited};
+  WS_CACHE.set(key,{t:Date.now(),v});return v;
+}
+function choose(title,list){
+  const z=document.createElement('div');z.className='zoom';
+  const box=document.createElement('div');box.className='pick';
+  const h=document.createElement('div');h.className='t';h.textContent=title;box.appendChild(h);
+  list.slice(0,12).forEach(s=>{
+    const b=document.createElement('button');b.className='b'+(s.mine?' f':'');
+    b.textContent='▶ '+s.name+(s.type?' · '+s.type:'');
+    b.onclick=e=>{e.stopPropagation();window.open(s.url,'_blank','noopener');z.remove()};
+    box.appendChild(b);
+  });
+  z.appendChild(box);z.onclick=()=>z.remove();document.body.appendChild(z);
+}
+async function playTitle(t){
+  toast('Buscando dónde verlo…');
+  try{
+    const r=await findLinks(t);
+    if(!r.list.length){toast(r.limited&&!cfg.wm?'Trakt limita este acceso. Prueba añadiendo tu clave de Watchmode en Ajustes.':'No hay plataformas con enlace para este título.');return}
+    const mine=r.list.filter(s=>s.mine);
+    if(mine.length===1)window.open(mine[0].url,'_blank','noopener');
+    else choose(t.label,r.list);
+  }catch(err){toast(err.message)}
+}
+function tgtFor(n){
+  const o=n.o,tm=o.ids.tmdb;
+  if(n.kind==='movie')return {paths:['/movies/'+o.ids.trakt],tmdb:tm,kind:'movie',label:o.title};
+  const p=[];
+  if(n.kind==='episode'&&n.ep&&n.ep.ids)p.push('/episodes/'+n.ep.ids.trakt);
+  p.push('/shows/'+o.ids.trakt);
+  return {paths:p,tmdb:tm,kind:'tv',label:o.title+(n.kind==='episode'?` · T${n.ep.season}E${n.ep.number}`:'')};
 }
 
-async function generateCodeChallenge(verifier) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const digest = await window.crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/* ===== Ficha de serie o película ===== */
+const STAT={ended:'FINALIZADA',canceled:'CANCELADA','returning series':'SERIE QUE REGRESA','in production':'EN PRODUCCIÓN',planned:'PLANIFICADA',upcoming:'PRÓXIMAMENTE',released:'ESTRENADA','post production':'EN POSTPRODUCCIÓN',rumored:'RUMOREADA'};
+async function openDetail(n){
+  navId++;const my=navId;
+  const o=n.o,isM=n.kind==='movie',base=(isM?'/movies/':'/shows/')+o.ids.trakt,kd=isM?'movie':'tv';
+  $('#h').textContent=o.title;
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  window.scrollTo(0,0);
+  if(!detailOpen){history.pushState({d:1},'');dpush++}
+  detailOpen=true;
+  try{
+    const [d,tx,pr,se,tm]=await Promise.all([
+      tr(base+'?extended=full'),
+      tr(base+'/translations/es').catch(()=>[]),
+      isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
+      isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[]),
+      tmdbInfo(kd,o.ids.tmdb),
+      loadWL().catch(()=>{}),
+      loadSeen().catch(()=>{})
+    ]);
+    if(my!==navId)return;
+    const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
+    const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
+    const stt=STAT[(d.status||'').toLowerCase()]||(d.status||'').toUpperCase();
+    const prg=pr?(pr.aired>0&&pr.completed>=pr.aired?'VISTO':pr.completed>0?'INICIADO':''):(isM&&SEEN.m.has(o.ids.trakt)?'VISTO':'');
+    const chips=[prg,stt].filter(Boolean).map(c=>`<span class="chip">${esc(c)}</span>`).join('');
+    const fol=(isM?WL.m:WL.s).has(o.ids.trakt),sn=SEEN.m.has(o.ids.trakt),sd=SEEN.c.has(o.ids.trakt);
+    const done={};
+    if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
+    const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
+      const eps=(s.episodes||[]).map(x=>{
+        const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date(),k=s.number+':'+x.number;
+        return `<div class="it" style="padding:8px 0"><div><span class="t" data-ep="${k}">E${x.number} · ${esc(x.title||'')}</span><div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir">▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div>`;
+      }).join('');
+      const aired=(s.episodes||[]).filter(x=>!(x.first_aired&&new Date(x.first_aired)>new Date()));
+      const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length,allw=aired.length>0&&aired.every(x=>done[s.number+'-'+x.number]);
+      return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
+    }).join('');
+    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
+    <div class="it"><div class="lc"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div><div class="lb"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div></div><div><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div><div class="s">${esc(meta)}</div><div>${chips}</div><div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
+    <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
+    $('#back').onclick=()=>history.back();
+    const shareUrl=`https://trakt.tv/${isM?'movies':'shows'}/${(d.ids&&d.ids.slug)||o.ids.trakt}`;
+    const shareText=`${d.title}${d.year?' ('+d.year+')':''}${d.rating?' · ★ '+d.rating.toFixed(1):''}\n${ov.slice(0,220)}${ov.length>220?'…':''}`;
+    window._d={isM,id:o.ids.trakt,n,share:{title:d.title,text:shareText,url:shareUrl}};
+    loadPosters();
+    platInfo(kd,o.ids.tmdb,d.network).then(list=>{
+      const el=$('#pv');if(!el||my!==navId)return;
+      el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" data-pv="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}" data-pv="${esc(x.n)}">${esc(x.n)}</span>`}).join('');
+    }).catch(()=>{});
+  }catch(err){fail(err,$('#v'))}
 }
 
-async function initOAuthLogin() {
-  const verifier = generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
-  sessionStorage.setItem('trakt_code_verifier', verifier);
-  const authUrl = new URL('https://trakt.tv/oauth/authorize');
-  authUrl.searchParams.append('response_type', 'code');
-  authUrl.searchParams.append('client_id', CONFIG.clientId);
-  authUrl.searchParams.append('redirect_uri', CONFIG.redirectUri);
-  authUrl.searchParams.append('code_challenge', challenge);
-  authUrl.searchParams.append('code_challenge_method', 'S256');
-  window.location.href = authUrl.toString();
+/* ===== Persona (reparto y equipo) ===== */
+const PERS={seg:'m',movies:[],shows:[]};
+function paintPers(){
+  document.querySelectorAll('[data-ps]').forEach(b=>b.classList.toggle('on',b.dataset.ps===PERS.seg));
+  startFeed($('#pl'),PERS.seg==='m'?PERS.movies:PERS.shows,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin títulos en esta categoría.'});
+}
+async function openPerson(id){
+  navId++;const my=navId,prev=window._d&&window._d.n;
+  $('#h').textContent='Reparto y equipo';
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  window.scrollTo(0,0);
+  if(!detailOpen){history.pushState({d:1},'');dpush++}
+  detailOpen=true;
+  try{
+    const [d]=await Promise.all([tmdbGet('person/'+id,'append_to_response=combined_credits'),loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
+    if(my!==navId)return;
+    if(!d)throw new Error('No hay datos de esta persona');
+    let bio=d.biography||'';
+    if(!bio){try{const r=await fetch(`${TMDB}person/${id}?api_key=${encodeURIComponent(cfg.tmdb)}&language=en-US`);if(r.ok)bio=(await r.json()).biography||''}catch(e){}}
+    const cc=d.combined_credits||{},seen=new Set(),all=[];
+    [...(cc.cast||[]).map(c=>({c,role:c.character||'Reparto'})),...(cc.crew||[]).filter(c=>JOBES[c.job]).map(c=>({c,role:JOBES[c.job]}))].forEach(({c,role})=>{
+      if(c.media_type!=='movie'&&c.media_type!=='tv')return;
+      const k=c.media_type+c.id;if(seen.has(k))return;seen.add(k);
+      const tv=c.media_type==='tv',date=(tv?c.first_air_date:c.release_date)||'';
+      const it=tmItem(c,tv,(role?role+' · ':'')+(date?fmt(date):'Sin fecha'));it.vod=false;
+      all.push(it);
+    });
+    all.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    PERS.movies=all.filter(x=>!x.tv);PERS.shows=all.filter(x=>x.tv);PERS.seg=PERS.movies.length?'m':'s';
+    const info=[d.birthday?'Nacimiento: '+fmt(d.birthday):'',d.place_of_birth||'',d.deathday?'Fallecimiento: '+fmt(d.deathday):''].filter(Boolean).join(' · ');
+    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
+    <div class="it"><div class="lc">${d.profile_path?`<img src="https://image.tmdb.org/t/p/w185${d.profile_path}" alt="" data-z="1">`:'<div class="ph"></div>'}</div><div><div class="t">${esc(d.name)}</div><div class="s">${esc(info)}</div><div class="s">${esc(d.known_for_department||'')}</div></div></div>
+    ${bio?`<div class="box"><p>${esc(bio.length>700?bio.slice(0,700)+'…':bio)}</p></div>`:''}
+    <div class="box" style="padding-bottom:0"><div class="seg"><button data-ps="m">Películas (${PERS.movies.length})</button><button data-ps="s">Series (${PERS.shows.length})</button></div></div><div id="pl"></div>`;
+    $('#back').onclick=()=>prev?openDetail(prev):history.back();
+    paintPers();
+  }catch(err){fail(err,$('#v'))}
 }
 
-async function catchOauthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
+/* ===== Ficha de episodio ===== */
+async function openEpisode(show,sn,en){
+  navId++;const my=navId,pad=x=>String(x).padStart(2,'0');
+  $('#h').textContent=show.title;
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  window.scrollTo(0,0);
+  if(!detailOpen){history.pushState({d:1},'');dpush++}
+  detailOpen=true;
+  try{
+    const base=`/shows/${show.ids.trakt}/seasons/${sn}/episodes/${en}`;
+    const [e,tx,w]=await Promise.all([tr(base+'?extended=full'),tr(base+'/translations/es').catch(()=>[]),tr(`/shows/${show.ids.trakt}/progress/watched?specials=false`).catch(()=>null)]);
+    if(my!==navId)return;
+    const seen=!!(w&&(w.seasons||[]).some(s=>s.number===sn&&s.episodes.some(x=>x.number===en&&x.completed)));
+    const ov=(tx[0]&&tx[0].overview)||e.overview||'Sin descripción.';
+    const fut=e.first_aired&&new Date(e.first_aired)>new Date();
+    const info=[e.first_aired?(fut?'Se emite el ':'Estreno: ')+fmt(e.first_aired):'',e.runtime?e.runtime+' min':'',e.rating?'★ '+e.rating.toFixed(1):''].filter(Boolean).join(' · ');
+    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver a la serie</button></div>
+    <div class="box"><div class="sub">T${pad(sn)} | E${pad(en)}</div><div class="t" style="font-size:20px">${esc(e.title||'Episodio '+en)}</div><div class="s">${esc(info)}</div>
+    <div style="margin:12px 0">${fut?'':`<button class="b pb" data-play2="1">${PLAYLBL}</button>`}<button class="b ${seen?'f':''}" data-ev="1">${seen?'✓ Visto':'Visto'}</button></div><p>${esc(ov)}</p></div>`;
+    $('#back').onclick=()=>openDetail({kind:'show',o:show});
+    window._ep={show,sn,en,id:e.ids.trakt,seen};
+  }catch(err){fail(err,$('#v'))}
+}
+
+/* ===== Clics ===== */
+async function toggleSeenMovie(n,btn){
+  const id=n.o.ids.trakt,on=SEEN.m.has(id);
+  await tr(on?'/sync/history/remove':'/sync/history',{body:{movies:[{ids:{trakt:id}}]}});
+  on?SEEN.m.delete(id):SEEN.m.add(id);
+  if(btn){btn.textContent=on?'Visto':'✓ Visto';btn.classList.toggle('f',!on)}
+  toast(on?'Desmarcada como vista':'Marcada como vista');
+}
+async function toggleSeenShow(n,btn){
+  const id=n.o.ids.trakt,body={shows:[{ids:{trakt:id}}]},on=n.sdone!==undefined?n.sdone:SEEN.c.has(id);
+  if(!confirm(on?'¿Quitar «'+n.o.title+'» de vistos? Se desmarcarán todos sus episodios.':'¿Marcar «'+n.o.title+'» como serie vista completa?'))return;
+  await tr(on?'/sync/history/remove':'/sync/history',{body});
+  n.sdone=!on;delete CD[id];
+  if(on)SEEN.c.delete(id);else SEEN.c.add(id);
+  btn.textContent=on?'Visto':'✓ Visto';btn.classList.toggle('f',!on);
+  toast(on?'Serie desmarcada':'Serie marcada como vista');
+}
+async function toggleFollow(n,btn){
+  const isM=n.kind==='movie',set=isM?WL.m:WL.s,id=n.o.ids.trakt,ids={ids:{trakt:id}},body=isM?{movies:[ids]}:{shows:[ids]},on=set.has(id);
+  await tr(on?'/sync/watchlist/remove':'/sync/watchlist',{body});
+  on?set.delete(id):set.add(id);
+  btn.textContent=on?'+ Seguir':'✓ Siguiendo';btn.classList.toggle('f',!on);
+  toast(on?'Dejaste de seguirla':'Siguiendo');
+  return on;
+}
+document.addEventListener('click',async e=>{
+  const T=e.target;let x;
+  if((x=T.closest('img[data-z]'))){const z=document.createElement('div');z.className='zoom';const im=document.createElement('img');im.src=x.src.replace('/w185/','/w780/');im.alt='';z.appendChild(im);z.onclick=()=>z.remove();document.body.appendChild(z);return}
+  if((x=T.closest('[data-sg]'))){LS2[tab].seg=x.dataset.sg;paintList(tab);return}
+  if((x=T.closest('[data-cs]'))){CAL.seg=x.dataset.cs;calRun();return}
+  if((x=T.closest('[data-ds]'))){document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===x));discRun(x.dataset.ds);return}
+  if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
+  if(T.closest('#bk')){tab==='cal'?paintEs():paintList(tab);return}
+  if((x=T.closest('[data-ps]'))){PERS.seg=x.dataset.ps;paintPers();return}
+  if((x=T.closest('[data-pv]'))){openPlatform(x.dataset.pv);return}
+  if((x=T.closest('[data-person]'))){if(x.dataset.person)openPerson(x.dataset.person);return}
+  if((x=T.closest('[data-sv]'))){
+    e.preventDefault();
+    const det=x.closest('details'),un=[...det.querySelectorAll('[data-e]')],wa=[...det.querySelectorAll('[data-u]')];
+    const mark=un.length>0,list=mark?un:wa;
+    if(!list.length)return;
+    x.disabled=true;
+    try{
+      await tr(mark?'/sync/history':'/sync/history/remove',{body:{episodes:list.map(b=>({ids:{trakt:+(b.dataset.e||b.dataset.u)}}))}});
+      list.forEach(b=>{const id=b.dataset.e||b.dataset.u;b.outerHTML=mark?`<button class="b f" data-u="${id}">✓ Visto</button>`:`<button class="b" data-e="${id}">Visto</button>`});
+      const sc=det.querySelector('.sc');if(sc)sc.textContent=det.querySelectorAll('[data-u]').length;
+      x.textContent=mark?'✓ Visto':'Visto';x.classList.toggle('f',mark);
+      if(window._d)delete CD[window._d.n.o.ids.trakt];
+      toast(mark?'Temporada marcada como vista':'Temporada desmarcada');
+    }catch(err){toast(err.message)}
+    x.disabled=false;return;
+  }
+  if((x=T.closest('[data-pp]'))){const [id,sn,en]=x.dataset.pp.split(':'),sh=window._d.n.o;playTitle({paths:['/episodes/'+id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${sn}E${en}`});return}
+  if((x=T.closest('[data-ep]'))){const [sn,en]=x.dataset.ep.split(':').map(Number);openEpisode(window._d.n.o,sn,en);return}
+  if(T.closest('[data-play]')){playTitle(tgtFor(window._d.n));return}
+  if(T.closest('[data-play2]')){const E=window._ep,sh=E.show;playTitle({paths:['/episodes/'+E.id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${E.sn}E${E.en}`});return}
+  if((x=T.closest('[data-ev]'))){
+    const E=window._ep,on=E.seen;x.disabled=true;
+    try{await tr(on?'/sync/history/remove':'/sync/history',{body:{episodes:[{ids:{trakt:E.id}}]}});E.seen=!on;delete CD[E.show.ids.trakt];x.textContent=on?'Visto':'✓ Visto';x.classList.toggle('f',!on);toast(on?'Desmarcado':'Marcado como visto')}
+    catch(err){toast(err.message)}
+    x.disabled=false;return;
+  }
+  if((x=T.closest('[data-tm]'))){
+    const tt=x.dataset.tt||'movie';
+    try{const r=await tr(`/search/tmdb/${x.dataset.tm}?type=${tt}`);if(r[0]&&r[0][tt])openDetail({kind:tt,o:r[0][tt]});else toast('Sin ficha en Trakt')}
+    catch(err){toast(err.message)}
+    return;
+  }
+  if((x=T.closest('[data-o]'))){
+    const n=items[+x.dataset.o];if(!n)return;
+    if(n.unres){try{await ensure(n)}catch(err){toast(err.message);return}}
+    openDetail(n);return;
+  }
+  if((x=T.closest('[data-u]'))){
+    x.disabled=true;
+    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Visto deshecho')}
+    catch(err){toast(err.message);x.disabled=false}
+    return;
+  }
+  if((x=T.closest('[data-e]'))){
+    x.disabled=true;
+    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+x.dataset.e}}]}});x.outerHTML=`<button class="b f" data-u="${x.dataset.e}">✓ Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Marcado como visto')}
+    catch(err){toast(err.message);x.disabled=false}
+    return;
+  }
+  if((x=T.closest('[data-d]'))){
+    const {isM,id,n}=window._d;x.disabled=true;
+    try{if(x.dataset.d==='seen')await toggleSeenMovie(n,x);else if(x.dataset.d==='sseen')await toggleSeenShow(n,x);else if(x.dataset.d==='share')await shareItem(n,window._d.share);else await toggleFollow(n,x)}catch(err){toast(err.message)}
+    x.disabled=false;return;
+  }
+  if((x=T.closest('[data-a]'))){
+    const i=+x.dataset.i,n=items[i],a=x.dataset.a;x.disabled=true;
+    try{
+      if(a==='share'){await shareItem(n);x.disabled=false;return}
+      if(n.unres){await ensure(n);syncBtns(x.closest('.it'),n)}
+      if(a==='play'){await playTitle(tgtFor(n))}
+      else if(a==='ss')await toggleSeenShow(n,x);
+      else if(a==='sw')await toggleSeenMovie(n,x);
+      else if(a==='follow'){
+        const was=await toggleFollow(n,x);
+        if(was&&tab==='wl'){
+          const id=n.o.ids.trakt,S=LS2.wl;
+          S.shows=S.shows.filter(r=>r.o.ids.trakt!==id);S.movies=S.movies.filter(r=>r.o.ids.trakt!==id);
+          const el=document.querySelector(`.it[data-ci="${i}"]`);if(el)el.remove();
+        }
+      }else if(a==='seen'){
+        const body={episodes:[{ids:{trakt:n.ep.ids.trakt}}]};
+        await tr('/sync/history',{body});
+        toast('Marcado como visto',async()=>{try{await tr('/sync/history/remove',{body});await refreshProg(i);toast('Deshecho')}catch(err){toast(err.message)}});
+        await refreshProg(i);
+        return;
+      }
+    }catch(err){toast(err.message)}
+    x.disabled=false;
+  }
+});
+
+
+// Conexión con Trakt (device code)
+function cfgView(){
+  const CIUDADES=['Cádiz','Ceuta','Córdoba','Granada','Menorca','Montilla','Tenerife','Zaragoza'].sort((a,b)=>a.localeCompare(b,'es'));
+  $('#v').innerHTML=`<div class="box">
+  <p class="s" style="margin:0 0 10px"><b>${tok?'✓ Conectado a Trakt':'⚠ Sin conexión con Trakt'}</b></p>
+  <p class="s">Crea tu app en <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> (solo necesitas el Client ID) y tu clave gratuita en <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org</a>. Todo se guarda solo en este dispositivo.</p>
+  <label>Trakt Client ID</label><input id="cid" value="${esc(cfg.cid||'')}" autocomplete="off">
+  <label>TMDB API key (carátulas, reparto y cartelera)</label><input id="tm" value="${esc(cfg.tmdb||'')}" autocomplete="off">
+  <label>Watchmode API key (opcional: enlaces de reproducción y plataformas)</label><input id="wm" value="${esc(cfg.wm||'')}" autocomplete="off" placeholder="Pega aquí tu clave de api.watchmode.com">
+  <label>Mis ciudades (cartelera)</label><div class="pgrid cgrid">${platsHtml(CIUDADES,'cities')}</div>
+  <label>Mis plataformas de pago</label><div class="pgrid">${platsHtml(PAGO,'plats')}</div>
+  <label>Plataformas gratuitas</label><div class="pgrid">${platsHtml(GRATIS,'plats')}</div>
+  <p class="s">Se guardan solo en este dispositivo. El botón ▶ solo aparece en En Progreso si el título está en una de tus plataformas.</p>
+  <button class="b" id="sv">Guardar ajustes</button><button class="b f" id="con">${tok?'Reconectar con Trakt':'Conectar con Trakt'}</button>
+  ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
+  <div style="margin-top:14px"><button class="b" id="inst">📲 Instalar en el móvil</button><div class="s" id="instmsg" style="margin-top:6px"></div></div><div id="dv"></div></div>`;
+  $('#con').onclick=connect;
+  $('#sv').onclick=()=>{saveCfg();toast('Ajustes guardados')};
+  $('#inst').onclick=installApp;
+  renderPending();
+  if(matchMedia('(display-mode: standalone)').matches){$('#inst').textContent='✓ Ya instalada';$('#inst').disabled=true}
+  if($('#out'))$('#out').onclick=()=>{tok=null;ls.set('tok',null);setNav();cfgView()};
+}
+const PAGO=['Netflix','Prime Video','Disney+','Max','Apple TV+','Movistar Plus+','SkyShowtime','Filmin','Crunchyroll','Atresplayer','Rakuten TV','YouTube'];
+const GRATIS=['RTVE Play','Mitele','Samsung TV Plus','Plex','Pluto TV','Atresplayer gratis','YouTube gratis'];
+const platsHtml=(a,key)=>a.map(n=>`<label class="chkrow"><input type="checkbox" value="${esc(n)}" ${(cfg[key]||[]).includes(n)?'checked':''}>${esc(n)}</label>`).join('');
+
+let deferredInstall=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e});
+addEventListener('appinstalled',()=>{deferredInstall=null;toast('App instalada')});
+async function installApp(){
+  if(deferredInstall){deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;return}
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  $('#instmsg').textContent=ios?'En Safari: pulsa Compartir y luego «Añadir a pantalla de inicio».':'En Chrome: abre el menú ⋮ y pulsa «Instalar aplicación» o «Añadir a pantalla de inicio».';
+}
+function saveCfg(){
+  const vals=sel=>[...document.querySelectorAll(sel)].map(x=>x.value);
+  cfg=Object.assign({},cfg,{cid:$('#cid').value.trim(),tmdb:$('#tm').value.trim(),wm:$('#wm').value.trim(),cities:vals('.cgrid input:checked'),plats:vals('.pgrid:not(.cgrid) input:checked')});
+  ls.set('cfg',cfg);
+}
+
+let pollId=0;
+function renderPending(){
+  const pd=ls.get('pend'),el=$('#dv');
+  if(!el||!pd||Date.now()>pd.exp||tok)return;
+  el.innerHTML=`<p>Abre <a href="${esc(pd.url)}" target="_blank" rel="noopener">${esc(pd.url)}</a> e introduce este código:</p><div class="code">${esc(pd.uc)}</div><p class="s">Esperando confirmación… al volver a la app se comprueba solo.</p><button class="b" id="newc">Obtener código nuevo</button>`;
+  $('#newc').onclick=connect;
+}
+async function pollDevice(){
+  const my=++pollId;
+  try{
+    for(;;){
+      const pd=ls.get('pend');
+      if(my!==pollId||!pd)return;
+      if(Date.now()>pd.exp)throw new Error('El código ha caducado. Pulsa «Obtener código nuevo».');
+      const p=await fetch(API+'/oauth/device/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:pd.dc,client_id:cfg.cid,code_verifier:pd.ver})});
+      if(my!==pollId)return;
+      if(p.status===200){tok=await p.json();ls.set('tok',tok);ls.set('pend',null);toast('Conectado');setNav();return go('prog')}
+      if(p.status===429){pd.iv+=2;ls.set('pend',pd)}
+      else if(p.status!==400)throw new Error('Conexión rechazada ('+p.status+'). Pulsa «Obtener código nuevo».');
+      await new Promise(r=>setTimeout(r,pd.iv*1000));
+    }
+  }catch(err){
+    if(my===pollId){ls.set('pend',null);if($('#dv'))$('#dv').innerHTML=`<p class="s">${esc(err.message)}</p><button class="b" id="newc">Obtener código nuevo</button>`;if($('#newc'))$('#newc').onclick=connect}
+  }
+}
+async function connect(){
+  saveCfg();
+  if(!cfg.cid){toast('Falta el Client ID');return}
+  try{
+    const b64=a=>btoa(String.fromCharCode(...new Uint8Array(a))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    const ver=b64(crypto.getRandomValues(new Uint8Array(64)));
+    const chal=b64(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ver)));
+    const r=await fetch(API+'/oauth/device/code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cfg.cid,code_challenge:chal,code_challenge_method:'S256'})});
+    if(!r.ok)throw new Error('Trakt rechazó el Client ID ('+r.status+')');
+    const d=await r.json();
+    ls.set('pend',{dc:d.device_code,uc:d.user_code,url:d.verification_url,iv:d.interval||5,exp:Date.now()+d.expires_in*1000,ver});
+    renderPending();pollDevice();
+  }catch(err){$('#dv').innerHTML=`<p class="s">${esc(err.message)}</p>`}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ls.get('pend')&&!tok)pollDevice()});
+
+const TABS=[['prog','En Progreso'],['wl','Pendientes'],['disc','Descubrir'],['cal','Estrenos'],['hist','Vistos'],['cfg','Ajustes']];
+const ICON={prog:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',wl:'<path d="M6 3h12v18l-6-4-6 4z"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',disc:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',hist:'<path d="M2 13l4 4L14 8"/><path d="M10 17l1 1L22 8"/>',cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>'};
+function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[t[0]]}</svg></span>${t[1]}</button>`).join('')}
+$('#nav').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)go(t.dataset.t)});
+async function go(t){
+  tab=t;navId++;feedTok++;detailOpen=false;const my=navId;setNav();
+  if(feedIO)feedIO.disconnect();
+  if(dpush>0){const k=dpush;dpush=0;history.go(-k)}
+  $('#h').textContent=TABS.find(x=>x[0]===t)[1];
+  window.scrollTo(0,0);
+  if(t==='cfg')return cfgView();
+  if(!tok){toast('Conecta primero tu cuenta de Trakt');tab='cfg';setNav();return cfgView()}
+  $('#v').innerHTML='<div class="msg">Cargando…</div>';
+  try{await views[t]()}catch(err){if(my!==navId)return;fail(err,$('#v'))}
+}
+/* Deslizar a izquierda/derecha para cambiar de sección (como Instagram) */
+(function(){
+  const main=document.querySelector('main');
+  let sx=0,sy=0,dx=0,dy=0,dir=0,on=false;
+  const reset=()=>{main.style.transition='transform .2s ease-out,opacity .2s';main.style.transform='';main.style.opacity=''};
+  addEventListener('touchstart',e=>{
+    on=false;
+    if(e.touches.length!==1||document.querySelector('.zoom,#intro'))return;
+    const p=e.touches[0];
+    if(p.clientX<24||p.clientX>innerWidth-24||e.target.closest('input,textarea,select'))return;
+    sx=p.clientX;sy=p.clientY;dx=dy=0;dir=0;on=true;
+  },{passive:true});
+  addEventListener('touchmove',e=>{
+    if(!on)return;
+    const p=e.touches[0];dx=p.clientX-sx;dy=p.clientY-sy;
+    if(!dir&&(Math.abs(dx)>10||Math.abs(dy)>10))dir=Math.abs(dx)>Math.abs(dy)*1.5?1:-1;
+    if(dir===1){main.style.transition='none';main.style.transform=`translateX(${dx*0.5}px)`;main.style.opacity=String(1-Math.min(Math.abs(dx),300)/700)}
+  },{passive:true});
+  addEventListener('touchcancel',()=>{if(on&&dir===1)reset();on=false},{passive:true});
+  addEventListener('touchend',()=>{
+    if(!on)return;on=false;
+    if(dir!==1||Math.abs(dx)<70){if(dir===1)reset();return}
+    if(detailOpen){reset();if(dx>0)history.back();return}
+    const i=TABS.findIndex(x=>x[0]===tab),j=i+(dx<0?1:-1);
+    if(j<0||j>=TABS.length){reset();return}
+    const left=dx<0;
+    main.style.transition='transform .15s ease-in,opacity .15s';
+    main.style.transform=`translateX(${left?'-60%':'60%'})`;main.style.opacity='0';
+    setTimeout(()=>{
+      go(TABS[j][0]);
+      main.style.transition='none';main.style.transform=`translateX(${left?'60%':'-60%'})`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{main.style.transition='transform .2s ease-out,opacity .2s';main.style.transform='';main.style.opacity=''}));
+    },150);
+  },{passive:true});
+})();
+/* Atrás: una vez cierra la ficha; dos veces seguidas sale de la app */
+history.replaceState({root:1},'');history.pushState({app:1},'');
+addEventListener('popstate',e=>{
+  if(detailOpen){detailOpen=false;dpush=Math.max(0,dpush-1);go(tab);return}
+  if(e.state&&e.state.root){
+    if(Date.now()-lastBack<2000){history.back();return}
+    lastBack=Date.now();toast('Pulsa otra vez atrás para salir');history.pushState({app:1},'');
+  }
+});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+(function(){const i=$('#intro');if(!i)return;const end=()=>{i.classList.add('out');setTimeout(()=>i.remove(),600)};i.onclick=end;setTimeout(end,2300)})();
+(function(){
+  const m=/^#ver=(\d+):(\d+):(\d+):(\d+):(\d*)/.exec(location.hash);
+  if(!m||!tok)return;
+  const [,sh,ep,sn,en,tm]=m;
+  history.replaceState(history.state,'',location.pathname);
+  setTimeout(()=>playTitle({paths:['/episodes/'+ep,'/shows/'+sh],tmdb:tm||undefined,kind:'tv',label:`T${sn}E${en}`}),600);
+})();
+if(ls.get('pend')&&!tok)pollDevice();
+go(tab);
+</script>
+</body>
+</html>
