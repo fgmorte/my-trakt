@@ -83,9 +83,9 @@ img[data-z]{cursor:zoom-in}
 .it .lb .b.f{border-width:1.5px;background:rgba(255,107,154,.18);color:var(--ac)}
 .pi{width:11px;height:11px;vertical-align:-1px;margin-right:5px}
 .pv{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.it .pvi{width:18px;height:18px;border-radius:4px;opacity:.55}
+.it .pvi{width:28px;height:28px;border-radius:7px;opacity:.7;cursor:pointer}
 .it .pvi.on{opacity:.95}
-.pvt{font-size:11px;color:var(--mu);border:1px solid var(--ln);border-radius:5px;padding:0 5px}
+.pvt{font-size:12px;color:var(--mu);border:1px solid var(--ln);border-radius:6px;padding:3px 8px;cursor:pointer}
 .pvt.on{color:var(--tx)}
 .b.pb{background:#0b0710;border-color:#2a2433;color:#efebf5}
 .b.pb:disabled{opacity:.35}
@@ -267,7 +267,7 @@ const PLAYV=['play',PLAYLBL,'pb',0,1];
 const SEEN={s:new Set(),c:new Set(),m:new Set()};
 const WL={s:new Set(),m:new Set(),ok:false};
 const LS2={hist:{shows:[],movies:[],seg:'show',q:''},wl:{shows:[],movies:[],seg:'show',q:''}};
-const CAL={seg:'e'};
+const CAL={seg:'c'};
 let detailOpen=false,dpush=0,lastBack=0;
 const ENDED=x=>/ended|canceled/i.test((x.show&&x.show.status)||'');
 const byDesc=k=>(a,b)=>(b[k]||'').localeCompare(a[k]||'');
@@ -317,7 +317,7 @@ function btnsFor(n){
   const out=[];
   if(!n.noFollow)out.push(FOLLOW(n));
   out.push(n.kind==='movie'?seenBtn(n):n.kind==='episode'?['seen','Visto']:showSeenBtn(n));
-  out.push(n.vod?PLAYV:PLAY,SHARE);
+  out.push(n.vod?PLAYV:PLAY);
   return out;
 }
 const TMAP=ls.get('tmap')||{};
@@ -341,6 +341,13 @@ function syncBtns(it,n){
   if(isM){const on=SEEN.m.has(id);set('sw',on?'✓ Visto':'Visto',on)}
   else{const on=n.sdone!==undefined?n.sdone:SEEN.c.has(id);set('ss',on?'✓ Visto':'Visto',on)}
   set('follow',fol?'✓ Siguiendo':'+ Seguir',fol);
+}
+const HOME={'Netflix':'https://www.netflix.com/browse','Prime Video':'https://www.primevideo.com/','Disney+':'https://www.disneyplus.com/','Max':'https://www.max.com/','Apple TV+':'https://tv.apple.com/','Movistar Plus+':'https://ver.movistarplus.es/','SkyShowtime':'https://www.skyshowtime.com/','Filmin':'https://www.filmin.es/','Crunchyroll':'https://www.crunchyroll.com/','Rakuten TV':'https://rakuten.tv/es','Atresplayer':'https://www.atresplayer.com/','RTVE Play':'https://www.rtve.es/play/','Mitele':'https://www.mitele.es/','YouTube':'https://www.youtube.com/','Pluto TV':'https://pluto.tv/es','Plex':'https://watch.plex.tv/','Samsung TV Plus':'https://www.samsungtvplus.com/'};
+function openPlatform(co){
+  const D=window._d,t=D&&D.n?tgtFor(D.n):null,c=t&&WS_CACHE.get(t.paths.join('|'));
+  const hit=c&&c.v.list.find(q=>company(q.name)===co);
+  const url=(hit&&hit.url)||HOME[co];
+  if(url)window.open(url,'_blank','noopener');else toast('No tengo el enlace de '+co);
 }
 async function shareItem(n,pre){
   if(pre){
@@ -524,16 +531,6 @@ function tmItem(m,tv,extra){
   return {kind:tv?'show':'movie',tv,unres:true,vod:true,date,rel:date,extra:extra||('Estreno: '+fmt(date)),o:{title:(tv?m.name:m.title)||'',year:y?+y:undefined,ids:{tmdb:m.id}}};
 }
 const ES={vod:null,cine:null,vt:0,ct:0,q:''};
-async function vodList(){
-  const now=new Date(),d0=ymd(new Date(now.getFullYear(),now.getMonth(),1)),d1=ymd(new Date(Date.now()+30*864e5));
-  const w='watch_region=ES&with_watch_monetization_types=flatrate&page=',jobs=[];
-  for(let p=1;p<=3;p++){
-    jobs.push(tmdbGet('discover/tv',`first_air_date.gte=${d0}&first_air_date.lte=${d1}&sort_by=first_air_date.asc&${w}${p}`).then(d=>((d&&d.results)||[]).map(m=>tmItem(m,true))));
-    jobs.push(tmdbGet('discover/movie',`with_release_type=4&release_date.gte=${d0}&release_date.lte=${d1}&sort_by=primary_release_date.asc&${w}${p}`).then(d=>((d&&d.results)||[]).map(m=>tmItem(m,false))));
-  }
-  const seen=new Set();
-  return (await Promise.all(jobs)).flat().filter(x=>x.date&&!seen.has(x.tv+':'+x.o.ids.tmdb)&&seen.add(x.tv+':'+x.o.ids.tmdb)).sort((a,b)=>a.date.localeCompare(b.date));
-}
 async function cineList(){
   const jobs=[];
   for(let p=1;p<=5;p++)jobs.push(tmdbGet('movie/now_playing','page='+p).then(d=>((d&&d.results)||[]).map(m=>Object.assign(tmItem(m,false),{grp:'now',gname:'En cartelera'}))));
@@ -573,30 +570,16 @@ async function calRun(){
   document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
   try{
     const old=t=>Date.now()-t>6e5;
-    if(CAL.seg==='c'){if(!ES.cine||old(ES.ct)){ES.cine=await cineList();ES.ct=Date.now()}}
-    else if(!ES.vod||old(ES.vt)){ES.vod=await vodList();ES.vt=Date.now()}
+    if(!ES.cine||old(ES.ct)){ES.cine=await cineList();ES.ct=Date.now()}
     if(my!==navId)return;
     paintEs();
   }catch(err){fail(err,box)}
 }
 
 /* ===== Descubrir ===== */
-const CANALES=[
-  ['RTVE Play',[['La 1','https://www.rtve.es/play/videos/directo/la-1/'],['La 2','https://www.rtve.es/play/videos/directo/la-2/']]],
-  ['Mitele',[['Telecinco','https://www.mitele.es/directo/telecinco/'],['Cuatro','https://www.mitele.es/directo/cuatro/']]],
-  ['Atresplayer gratis',[['Antena 3','https://www.atresplayer.com/directos/antena3/'],['laSexta','https://www.atresplayer.com/directos/lasexta/']]]
-];
-function liveTv(box){
-  const mine=(cfg.plats||[]).map(normN),rows=[];
-  CANALES.forEach(([pl,chs])=>{if(mine.includes(normN(pl))||(pl==='Atresplayer gratis'&&mine.includes('atresplayer')))chs.forEach(([nm,url])=>rows.push({pl,nm,url}))});
-  if(!rows.length){box.innerHTML='<div class="msg">Marca RTVE Play, Mitele o Atresplayer gratis en Ajustes para ver aquí sus canales.</div>';return}
-  const g=q=>`https://www.google.com/search?q=${encodeURIComponent(q)}&hl=es&gl=es`;
-  box.innerHTML='<div class="box s">Canales de tus plataformas gratuitas. La programación de hoy se abre en Google.</div>'+rows.map(r=>`<div class="it"><div class="lc"><div class="ph" style="display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:13px;padding:4px">${esc(r.nm)}</div><div class="lb"><a class="b pb" href="${r.url}" target="_blank" rel="noopener">${PLAYLBL}</a><a class="b" href="${g('programación '+r.nm+' hoy')}" target="_blank" rel="noopener">Guía hoy</a></div></div><div><div class="t">${esc(r.nm)}</div><div class="sub">En directo</div><div class="s">${esc(r.pl.replace(' gratis',''))} · canal generalista</div></div></div>`).join('');
-}
 async function discRun(mode,q){
   const r=$('#r');r.innerHTML='<div class="msg">Cargando…</div>';
   try{
-    if(mode==='l')return liveTv(r);
     let list;
     if(mode==='t'){
       const [m,s]=await Promise.all([tr('/movies/trending?limit=40'),tr('/shows/trending?limit=40')]);
@@ -633,7 +616,7 @@ const views={
     listShell('wl');
   },
   async cal(){
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-cs="e">VODtv</button><button data-cs="c">Cines</button></div><input id="eq" type="search" placeholder="Buscar en estrenos" enterkeyhint="search" value="${esc(ES.q)}"></div><div id="cl"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="eq" type="search" placeholder="Buscar en estrenos" enterkeyhint="search" value="${esc(ES.q)}"></div><div id="cl"></div>`;
     $('#eq').addEventListener('input',e=>{ES.q=e.target.value;paintEs()});
     $('#eq').addEventListener('keydown',e=>{if(e.key==='Enter')esSearch(e.target.value)});
     await Promise.all([loadWL(),loadSeen()]).catch(()=>{});
@@ -643,7 +626,7 @@ const views={
     const my=navId;
     await loadWL().catch(()=>{});
     if(my!==navId)return;
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-ds="t" class="on">Tendencias</button><button data-ds="l">LiveTV</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim())discRun('s',e.target.value)});
     await discRun('t');
   },
@@ -798,7 +781,7 @@ async function openDetail(n){
     loadPosters();
     platInfo(kd,o.ids.tmdb,d.network).then(list=>{
       const el=$('#pv');if(!el||my!==navId)return;
-      el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}">${esc(x.n)}</span>`}).join('');
+      el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" data-pv="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}" data-pv="${esc(x.n)}">${esc(x.n)}</span>`}).join('');
     }).catch(()=>{});
   }catch(err){fail(err,$('#v'))}
 }
@@ -900,6 +883,7 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
   if(T.closest('#bk')){tab==='cal'?paintEs():paintList(tab);return}
   if((x=T.closest('[data-ps]'))){PERS.seg=x.dataset.ps;paintPers();return}
+  if((x=T.closest('[data-pv]'))){openPlatform(x.dataset.pv);return}
   if((x=T.closest('[data-person]'))){if(x.dataset.person)openPerson(x.dataset.person);return}
   if((x=T.closest('[data-sv]'))){
     e.preventDefault();
