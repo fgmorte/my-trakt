@@ -80,7 +80,8 @@ img[data-z]{cursor:zoom-in}
 .it .lc.big .ph,.it .lc.big img{width:112px;height:168px}
 .trow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .trow .chip{flex:none;margin:2px 0 0 0}
-.brow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px 4px}
+.brow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px 14px;border-bottom:1px solid var(--ln)}
+.it.nb{border-bottom:0;padding-bottom:0}
 .brow .b{margin:0;width:100%;text-align:center;padding:6px 0;font-size:11px;border-radius:10px;white-space:nowrap;overflow:hidden;line-height:1.3}
 .brow .b.f{border-width:1.5px;background:rgba(255,107,154,.18);color:var(--ac)}
 .it .lc.w .ph,.it .lc.w img{width:116px;height:65px}
@@ -187,20 +188,21 @@ async function tmMeta(kind,tmdb){
   finally{freeSlot()}
 }
 async function poster(kind,tmdb){return (await tmMeta(kind,tmdb)).p}
-const STL=ls.get('stl')||{};
+const STL=ls.get('stl2')||{};
 async function epStill(tmdb,sn,en){
-  const k=tmdb+':'+sn+':'+en;
+  const k=tmdb+':'+sn+':'+en,none={u:'',o:''};
   if(STL[k]!==undefined)return STL[k];
-  if(!cfg.tmdb)return '';
+  if(!cfg.tmdb)return none;
   await slot();
   try{
-    const r=await fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${sn}/episode/${en}?api_key=${encodeURIComponent(cfg.tmdb)}`);
-    if(r.status===404)STL[k]='';
-    else if(!r.ok)return '';
-    else{const d=await r.json();STL[k]=d.still_path?'https://image.tmdb.org/t/p/w300'+d.still_path:''}
-    clearTimeout(epStill.t);epStill.t=setTimeout(()=>ls.set('stl',STL),600);
+    const g=async lang=>{const r=await fetch(`https://api.themoviedb.org/3/tv/${tmdb}/season/${sn}/episode/${en}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${lang}`);return r.status===404?{}:(r.ok?r.json():null)};
+    const d=await g('es-ES');
+    if(d===null)return none;
+    if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
+    STL[k]={u:d.still_path?'https://image.tmdb.org/t/p/w300'+d.still_path:'',o:(d.overview||'').slice(0,300)};
+    clearTimeout(epStill.t);epStill.t=setTimeout(()=>ls.set('stl2',STL),600);
     return STL[k];
-  }catch(x){return ''}
+  }catch(x){return none}
   finally{freeSlot()}
 }
 
@@ -249,9 +251,13 @@ async function progOf(id){
 const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==undefined?` data-o="${el.dataset.o}"`:''}${el.dataset.z?' data-z="1"':''}>`;
 async function fillPoster(el){
   const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),idx=+el.dataset.o,m=await tmMeta(k,id);
-  const d=it&&it.querySelector('.desc');if(d&&m.o)d.textContent=m.o;
+  const d=it&&it.querySelector('.desc');
   let u=m.p;
-  if(el.dataset.ps&&id){const ps=el.dataset.ps.split(':');u=(await epStill(id,ps[0],ps[1]))||m.bd||m.p}
+  if(el.dataset.ps&&id){
+    const ps=el.dataset.ps.split(':'),es=await epStill(id,ps[0],ps[1]);
+    u=es.u||m.bd||m.p;
+    if(d){if(es.o)d.textContent=es.o;else if(m.o)d.textContent='Serie: '+m.o}
+  }else if(d&&m.o)d.textContent=m.o;
   if(el.dataset.z&&u)u=u.replace('/w185/','/w342/');
   if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
   const n=items[idx];
@@ -765,7 +771,7 @@ async function openDetail(n){
     const ov=(tx[0]&&tx[0].overview)||d.overview||'Sin sinopsis.';
     const meta=[d.rating?'★ '+d.rating.toFixed(1):'',d.runtime?d.runtime+' min':'',d.network,(d.genres||[]).slice(0,3).join(', ')].filter(Boolean).join(' · ');
     const stt=STAT[(d.status||'').toLowerCase()]||(d.status||'').toUpperCase();
-    const prg=pr?(pr.aired>0&&pr.completed>=pr.aired?'VISTO':pr.completed>0?'INICIADO':''):(isM&&SEEN.m.has(o.ids.trakt)?'VISTO':'');
+    const prg=pr?(pr.aired>0&&pr.completed>=pr.aired?'VISTO':''):(isM&&SEEN.m.has(o.ids.trakt)?'VISTO':'');
     const chips=[prg,stt].filter(Boolean).map(c=>`<span class="chip">${esc(c)}</span>`).join('');
     const fol=(isM?WL.m:WL.s).has(o.ids.trakt),sn=SEEN.m.has(o.ids.trakt),sd=SEEN.c.has(o.ids.trakt);
     const done={};
@@ -780,7 +786,7 @@ async function openDetail(n){
       return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
     }).join('');
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
-    <div class="it"><div class="lc big"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div></div><div><div class="trow"><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div>${stt?`<span class="chip">${esc(stt)}</span>`:''}</div><div class="s">${esc(meta)}</div>${prg?`<div><span class="chip">${esc(prg)}</span></div>`:''}<div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
+    <div class="it nb"><div class="lc big"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div></div><div><div class="trow"><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div>${stt?`<span class="chip">${esc(stt)}</span>`:''}</div><div class="s">${esc(meta)}</div>${prg?`<div><span class="chip">${esc(prg)}</span></div>`:''}<div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}</div></div>
     <div class="brow"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
     $('#back').onclick=()=>history.back();
