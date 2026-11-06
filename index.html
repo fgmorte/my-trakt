@@ -78,6 +78,8 @@ img[data-z]{cursor:zoom-in}
 .it .lc.w{width:116px;min-width:116px}
 .it .lc.big{width:112px;min-width:112px}
 .it .lc.big .ph,.it .lc.big img{width:112px;height:168px}
+.lcard .desc{-webkit-line-clamp:4}
+.lcard .rate{color:var(--tx)}
 .trow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .trow .chip{flex:none;margin:2px 0 0 0}
 .brow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px 14px;border-bottom:1px solid var(--ln)}
@@ -169,9 +171,9 @@ async function tr(path,opt={}){
   if(!r.ok){const er=new Error('Trakt respondió '+r.status);er.status=r.status;throw er}
   return r.json();
 }
-const TMX=ls.get('tmx3')||{};
+const TMX=ls.get('tmx5')||{};
 async function tmMeta(kind,tmdb){
-  const none={p:'',o:'',r:0,rd:'',bd:''};
+  const none={p:'',o:'',r:0,rd:'',bd:'',g:[],rt:0,net:'',vc:0,ns:0,ne:0};
   if(!cfg.tmdb||!tmdb)return none;
   const k=kind+tmdb;
   if(TMX[k])return TMX[k];
@@ -181,8 +183,8 @@ async function tmMeta(kind,tmdb){
     const d=await g('es-ES');
     if(!d)return none;
     if(!d.overview){const e=await g('en-US');if(e&&e.overview)d.overview=e.overview}
-    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||'',bd:d.backdrop_path?'https://image.tmdb.org/t/p/w300'+d.backdrop_path:''};
-    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx3',TMX),600);
+    TMX[k]={p:d.poster_path?'https://image.tmdb.org/t/p/w185'+d.poster_path:'',o:(d.overview||'').slice(0,300),r:d.vote_average||0,rd:d.release_date||d.first_air_date||'',bd:d.backdrop_path?'https://image.tmdb.org/t/p/w300'+d.backdrop_path:'',g:(d.genres||[]).map(x=>x.name),rt:d.runtime||(d.episode_run_time&&d.episode_run_time[0])||0,net:(d.networks&&d.networks[0]&&d.networks[0].name)||'',vc:d.vote_count||0,ns:d.number_of_seasons||0,ne:d.number_of_episodes||0};
+    clearTimeout(tmMeta.t);tmMeta.t=setTimeout(()=>ls.set('tmx5',TMX),600);
     return TMX[k];
   }catch(e){return none}
   finally{freeSlot()}
@@ -252,13 +254,15 @@ const imgTag=(u,el)=>`<img src="${u}" alt="" loading="lazy"${el.dataset.o!==unde
 async function fillPoster(el){
   const [k,id]=el.dataset.p.split(':'),it=el.closest('.it'),idx=+el.dataset.o,m=await tmMeta(k,id);
   const d=it&&it.querySelector('.desc');
+  const lc=!!(it&&it.classList&&it.classList.contains('lcard'));
+  if(lc)fillListInfo(it,k,id,m);
   let u=m.p;
   if(el.dataset.ps&&id){
     const ps=el.dataset.ps.split(':'),es=await epStill(id,ps[0],ps[1]);
     u=es.u||m.bd||m.p;
     if(d){if(es.o)d.textContent=es.o;else if(m.o)d.textContent='Serie: '+m.o}
   }else if(d&&m.o)d.textContent=m.o;
-  if(el.dataset.z&&u)u=u.replace('/w185/','/w342/');
+  if((el.dataset.z||lc)&&u)u=u.replace('/w185/','/w342/');
   if(u&&el.isConnected)el.outerHTML=imgTag(u,el);
   const n=items[idx];
   if(n&&n.unres){try{await ensure(n);syncBtns(it,n)}catch(e){}}
@@ -327,6 +331,28 @@ async function loadWL(){
 const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
 const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
 const showSeenBtn=n=>(n.sdone!==undefined?n.sdone:SEEN.c.has(n.o.ids.trakt))?['ss','✓ Visto','f']:['ss','Visto'];
+const fmtVotes=n=>n>=1000?(n/1000).toFixed(1).replace('.0','')+' mil':String(n);
+function listCard(n,i){
+  const o=n.o,k=n.kind==='movie'?'movie':'tv',tm=o.ids.tmdb||'';
+  const bt=btnsFor(n).filter(b=>b[0]!=='play'&&b[0]!=='share').map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${i}">${b[1]}</button>`).join('');
+  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it lcard" data-ci="${i}"><div class="lc big"><div class="ph" data-o="${i}" data-p="${k}:${tm}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${i}">${esc(o.title)}${o.year?` <span class="s">${o.year}</span>`:''}</div><div class="sub">${n.kind==='movie'?'Película':'Serie'}</div><div class="s info">${n.extra?esc(n.extra):''}</div><div class="s meta"></div><div class="s rate"></div><div class="s desc"></div><div class="pv"></div></div></div>`;
+}
+async function fillListInfo(it,k,id,m){
+  const info=it.querySelector('.info'),meta=it.querySelector('.meta'),rate=it.querySelector('.rate'),pv=it.querySelector('.pv');
+  if(info){
+    const parts=[];
+    if(info.textContent)parts.push(info.textContent);else if(m.rd)parts.push('Estreno: '+fmt(m.rd));
+    if((m.g||[]).length)parts.push(m.g.slice(0,3).join(', '));
+    info.textContent=parts.join(' · ');
+  }
+  if(meta)meta.textContent=[m.rt?m.rt+' min':'',m.ns?m.ns+(m.ns===1?' temporada':' temporadas'):'',m.ne?m.ne+' episodios':'',m.net].filter(Boolean).join(' · ');
+  if(rate)rate.textContent=m.r?'★ '+m.r.toFixed(1)+(m.vc?' · '+fmtVotes(m.vc)+' votos':''):'';
+  if(pv&&id){
+    const list=await platInfo(k,id,m.net).catch(()=>[]);
+    if(!pv.isConnected)return;
+    pv.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" data-pv="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}" data-pv="${esc(x.n)}">${esc(x.n)}</span>`}).join('');
+  }
+}
 function btnsFor(n){
   const out=[];
   if(!n.noFollow)out.push(FOLLOW(n));
@@ -357,8 +383,8 @@ function syncBtns(it,n){
   set('follow',fol?'✓ Siguiendo':'+ Seguir',fol);
 }
 const HOME={'Netflix':'https://www.netflix.com/browse','Prime Video':'https://www.primevideo.com/','Disney+':'https://www.disneyplus.com/','Max':'https://www.max.com/','Apple TV+':'https://tv.apple.com/','Movistar Plus+':'https://ver.movistarplus.es/','SkyShowtime':'https://www.skyshowtime.com/','Filmin':'https://www.filmin.es/','Crunchyroll':'https://www.crunchyroll.com/','Rakuten TV':'https://rakuten.tv/es','Atresplayer':'https://www.atresplayer.com/','RTVE Play':'https://www.rtve.es/play/','Mitele':'https://www.mitele.es/','YouTube':'https://www.youtube.com/','Pluto TV':'https://pluto.tv/es','Plex':'https://watch.plex.tv/','Samsung TV Plus':'https://www.samsungtvplus.com/'};
-function openPlatform(co){
-  const D=window._d,t=D&&D.n?tgtFor(D.n):null,c=t&&WS_CACHE.get(t.paths.join('|'));
+function openPlatform(co,homeOnly){
+  const D=window._d,t=!homeOnly&&D&&D.n?tgtFor(D.n):null,c=t&&WS_CACHE.get(t.paths.join('|'));
   const hit=c&&c.v.list.find(q=>company(q.name)===co);
   const url=(hit&&hit.url)||HOME[co];
   if(url)window.open(url,'_blank','noopener');else toast('No tengo el enlace de '+co);
@@ -523,7 +549,7 @@ async function searchList(mode,q){
   try{
     const d=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=20`)).map(norm).filter(Boolean).map(n=>{
       const id=n.o.ids.trakt,isM=n.kind==='movie';
-      n.extra=mode==='hist'?(isM?(SEEN.m.has(id)?'✓ Ya la has visto':'Sin ver'):(SEEN.c.has(id)?'✓ Serie completa':SEEN.s.has(id)?'En curso: aparece en En Progreso':'Sin ver')):((isM?WL.m:WL.s).has(id)?'✓ Ya la sigues':'No la sigues');
+      n.extra=mode==='hist'?(isM?(SEEN.m.has(id)?'✓ Ya la has visto':'Sin ver'):(SEEN.c.has(id)?'✓ Serie completa':SEEN.s.has(id)?'En curso: aparece en Por Ver':'Sin ver')):((isM?WL.m:WL.s).has(id)?'✓ Ya la sigues':'No la sigues');
       return n;
     });
     hl.innerHTML='<div class="box"><button class="b" id="bk">← Volver a mi lista</button></div><div id="hr"></div>';
@@ -565,7 +591,7 @@ function paintEs(){
   src.forEach(n=>{n.head=n.gname&&n.grp!==last?n.gname:'';if(n.gname)last=n.grp});
   document.querySelectorAll('[data-cs]').forEach(b=>b.classList.toggle('on',b.dataset.cs===CAL.seg));
   $('#cb').innerHTML=cine?cineBar():'';
-  startFeed(cf,src,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>(n.head?`<div class="sec">${n.head}</div>`:'')+card(n,btnsFor(n),i),empty:q?'Ninguna coincidencia. Pulsa Intro para buscar.':(cine?'No se pudo cargar la cartelera.':'No hay estrenos nuevos en plataformas.')});
+  startFeed(cf,src,{size:12,prep:async a=>a,html:listCard,empty:q?'Ninguna coincidencia. Pulsa Intro para buscar.':(cine?'No se pudo cargar la cartelera.':'No hay estrenos nuevos en plataformas.')});
 }
 async function esSearch(q){
   q=q.trim();if(!q||!$('#cf'))return;
@@ -574,7 +600,7 @@ async function esSearch(q){
     const d=await tmdbGet('search/multi','query='+encodeURIComponent(q));
     const list=((d&&d.results)||[]).filter(x=>x.media_type==='movie'||x.media_type==='tv').map(x=>tmItem(x,x.media_type==='tv'));
     cf.innerHTML='<div class="box"><button class="b" id="bk">← Volver</button></div><div id="cr2"></div>';
-    startFeed($('#cr2'),list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
+    startFeed($('#cr2'),list,{size:12,prep:async a=>a,html:listCard,empty:'Sin resultados.'});
   }catch(err){fail(err,cf)}
 }
 async function calRun(){
@@ -600,7 +626,7 @@ async function discRun(mode,q){
       list=[];for(let i=0;i<40;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
       list=list.map(norm).filter(Boolean);
     }else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
-    startFeed(r,list,{size:12,prep:async a=>a,btns:btnsFor,empty:'Sin resultados.'});
+    startFeed(r,list,{size:12,prep:async a=>a,html:listCard,empty:'Sin resultados.'});
   }catch(err){fail(err,r)}
 }
 
@@ -898,7 +924,7 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
   if(T.closest('#bk')){tab==='cal'?paintEs():paintList(tab);return}
   if((x=T.closest('[data-ps]'))){PERS.seg=x.dataset.ps;paintPers();return}
-  if((x=T.closest('[data-pv]'))){openPlatform(x.dataset.pv);return}
+  if((x=T.closest('[data-pv]'))){openPlatform(x.dataset.pv,!!x.closest('.lcard'));return}
   if((x=T.closest('[data-person]'))){if(x.dataset.person)openPerson(x.dataset.person);return}
   if((x=T.closest('[data-sv]'))){
     e.preventDefault();
@@ -994,7 +1020,7 @@ function cfgView(){
   <label>Mis ciudades (cartelera)</label><div class="pgrid cgrid">${platsHtml(CIUDADES,'cities')}</div>
   <label>Mis plataformas de pago</label><div class="pgrid">${platsHtml(PAGO,'plats')}</div>
   <label>Plataformas gratuitas</label><div class="pgrid">${platsHtml(GRATIS,'plats')}</div>
-  <p class="s">Se guardan solo en este dispositivo. El botón ▶ solo aparece en En Progreso si el título está en una de tus plataformas.</p>
+  <p class="s">Se guardan solo en este dispositivo. El botón ▶ solo aparece en Por Ver si el título está en una de tus plataformas.</p>
   <button class="b" id="sv">Guardar ajustes</button><button class="b f" id="con">${tok?'Reconectar con Trakt':'Conectar con Trakt'}</button>
   ${tok?'<button class="b" id="out">Cerrar sesión</button>':''}
   <div style="margin-top:14px"><button class="b" id="inst">📲 Instalar en el móvil</button><div class="s" id="instmsg" style="margin-top:6px"></div></div><div id="dv"></div></div>`;
@@ -1064,7 +1090,7 @@ async function connect(){
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ls.get('pend')&&!tok)pollDevice()});
 
-const TABS=[['prog','En Progreso'],['wl','Pendientes'],['disc','Descubrir'],['cal','Estrenos'],['hist','Vistos'],['cfg','Ajustes']];
+const TABS=[['prog','Por Ver'],['wl','Pendientes'],['disc','Descubrir'],['cal','Estrenos'],['hist','Vistos'],['cfg','Ajustes']];
 const ICON={prog:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',wl:'<path d="M6 3h12v18l-6-4-6 4z"/>',cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',disc:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',hist:'<path d="M2 13l4 4L14 8"/><path d="M10 17l1 1L22 8"/>',cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>'};
 function setNav(){$('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[t[0]]}</svg></span>${t[1]}</button>`).join('')}
 $('#nav').addEventListener('click',e=>{const t=e.target.closest('[data-t]');if(t)go(t.dataset.t)});
