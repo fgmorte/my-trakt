@@ -332,10 +332,11 @@ const following=n=>(n.kind==='movie'?WL.m:WL.s).has(n.o.ids.trakt);
 const FOLLOW=n=>following(n)?['follow','✓ Siguiendo','f']:['follow','+ Seguir'];
 const showSeenBtn=n=>(n.sdone!==undefined?n.sdone:SEEN.c.has(n.o.ids.trakt))?['ss','✓ Visto','f']:['ss','Visto'];
 const fmtVotes=n=>n>=1000?(n/1000).toFixed(1).replace('.0','')+' mil':String(n);
-function listCard(n,i){
+function listCard(n,i,btns){
   const o=n.o,k=n.kind==='movie'?'movie':'tv',tm=o.ids.tmdb||'';
-  const bt=btnsFor(n).filter(b=>b[0]!=='play'&&b[0]!=='share').map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${i}">${b[1]}</button>`).join('');
-  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it lcard" data-ci="${i}"><div class="lc big"><div class="ph" data-o="${i}" data-p="${k}:${tm}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${i}">${esc(o.title)}${o.year?` <span class="s">${o.year}</span>`:''}</div><div class="sub">${n.kind==='movie'?'Película':'Serie'}</div><div class="s info">${n.extra?esc(n.extra):''}</div><div class="s meta"></div><div class="s rate"></div><div class="s desc"></div><div class="pv"></div></div></div>`;
+  const bl=btns||btnsFor(n).filter(b=>b[0]!=='play'&&b[0]!=='share');
+  const bt=bl.map(b=>`<button class="b ${b[2]||''}" data-a="${b[0]}" data-i="${i}"${b[3]?' hidden':''}${b[4]?' disabled':''}>${b[1]}</button>`).join('');
+  return (n.head?`<div class="sec">${n.head}</div>`:'')+`<div class="it lcard" data-ci="${i}"><div class="lc big"><div class="ph" data-o="${i}" data-p="${k}:${tm}"></div><div class="lb">${bt}</div></div><div><div class="t" data-o="${i}">${esc(o.title)}${o.year?` <span class="s">${o.year}</span>`:''}</div><div class="sub">${n.sub||(n.kind==='movie'?'Película':'Serie')}</div><div class="s info">${n.extra?esc(n.extra):''}</div><div class="s meta"></div><div class="s rate"></div><div class="s desc"></div><div class="pv"></div></div></div>`;
 }
 async function fillListInfo(it,k,id,m){
   const info=it.querySelector('.info'),meta=it.querySelector('.meta'),rate=it.querySelector('.rate'),pv=it.querySelector('.pv');
@@ -534,7 +535,7 @@ function paintList(mode){
   const S=LS2[mode],q=S.q.trim().toLowerCase();
   const src=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
   document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===S.seg));
-  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),after:observePl,done:()=>{if(mode==='hist'&&S.seg==='show'&&!q){const b=document.querySelector('[data-sg="show"]');if(b)b.textContent='Series ('+items.length+')'}},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
+  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),html:(n,i)=>listCard(n,i,listBtns(mode,n)),after:observePl,done:()=>{if(mode==='hist'&&S.seg==='show'&&!q){const b=document.querySelector('[data-sg="show"]');if(b)b.textContent='Series ('+items.length+')'}},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
 }
 function listShell(mode){
   const S=LS2[mode];
@@ -553,7 +554,7 @@ async function searchList(mode,q){
       return n;
     });
     hl.innerHTML='<div class="box"><button class="b" id="bk">← Volver a mi lista</button></div><div id="hr"></div>';
-    startFeed($('#hr'),d,{size:20,prep:async a=>a,btns:btnsFor,empty:'Sin resultados en Trakt.'});
+    startFeed($('#hr'),d,{size:20,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),empty:'Sin resultados en Trakt.'});
   }catch(err){fail(err,hl)}
 }
 
