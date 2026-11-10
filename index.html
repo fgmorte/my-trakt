@@ -91,6 +91,7 @@ img[data-z]{cursor:zoom-in}
 .epsum p{margin:4px 0 6px;font-size:13.5px}
 [data-sm]{cursor:pointer}
 .lk{color:var(--ac);font-size:12px;font-weight:700;cursor:pointer}
+.vm{display:block;margin:10px auto 2px;padding:5px 18px}
 .rrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px}
 .rt{display:inline-flex;align-items:center;gap:5px;font-weight:800;font-size:15px;color:var(--tx)}
 .rt svg{width:16px;height:16px;flex:none}
@@ -235,21 +236,34 @@ const JOBES={Director:'Dirección',Writer:'Guion',Screenplay:'Guion','Executive 
 function tabsHtml(tm,isM){
   if(!tm)return '';
   const person=(nm,sub,pp,id)=>`<div class="pp" data-person="${id||''}">${pp?`<img src="https://image.tmdb.org/t/p/w92${pp}" alt="" loading="lazy">`:'<div class="av"></div>'}<div><b>${esc(nm)}</b><span>${esc(sub||'')}</span></div></div>`;
-  const cr=tm.credits||{},cast=(cr.cast||[]).slice(0,24).map(c=>person(c.name,c.character,c.profile_path,c.id)).join('');
+  const cr=tm.credits||{};
+  const cast=(cr.cast||[]).slice(0,30).map(c=>person(c.name,c.character,c.profile_path,c.id));
+  const ORD=['Director','Creator','Screenplay','Writer','Executive Producer','Producer','Original Music Composer','Director of Photography'];
   const seen=new Set(),eq=[];
   (tm.created_by||[]).forEach(c=>eq.push(person(c.name,'Creación',c.profile_path,c.id)));
-  (cr.crew||[]).filter(c=>JOBES[c.job]).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path,c.id))}});
+  (cr.crew||[]).filter(c=>JOBES[c.job]).sort((a,b)=>ORD.indexOf(a.job)-ORD.indexOf(b.job)).forEach(c=>{const k=c.id+c.job;if(!seen.has(k)&&eq.length<24){seen.add(k);eq.push(person(c.name,JOBES[c.job],c.profile_path,c.id))}});
   const rows=[],li=(t,v)=>{if(v)rows.push(`<div class="kv"><span>${t}</span>${v}</div>`)};
   const names=a=>(a||[]).map(x=>esc(x.name)).join(', ');
-  li('Productoras',names(tm.production_companies));li('Cadenas',names(tm.networks));
-  li('Países',names(tm.production_countries)||esc((tm.origin_country||[]).join(', ')));
-  li('Idioma original',esc(tm.original_language||''));li('Estado',esc(tm.status||''));
-  if(isM){li('Estreno',fmt(tm.release_date));li('Presupuesto',tm.budget?'$'+tm.budget.toLocaleString('es'):'');li('Recaudación',tm.revenue?'$'+tm.revenue.toLocaleString('es'):'')}
-  else{li('Primera emisión',fmt(tm.first_air_date));li('Última emisión',fmt(tm.last_air_date));li('Temporadas',tm.number_of_seasons);li('Episodios',tm.number_of_episodes)}
-  if(/^https:\/\//.test(tm.homepage||''))li('Web oficial',`<a href="${esc(tm.homepage)}" target="_blank" rel="noopener noreferrer">${esc(tm.homepage)}</a>`);
-  const E=t=>`<div class="msg">${t}</div>`;
+  const paises=names(tm.production_countries)||esc((tm.origin_country||[]).join(', '));
+  const web=/^https:\/\//.test(tm.homepage||'')?`<a href="${esc(tm.homepage)}" target="_blank" rel="noopener noreferrer">${esc(tm.homepage)}</a>`:'';
+  if(isM){
+    li('Productoras',names(tm.production_companies));li('Estreno',fmt(tm.release_date));li('Estado',esc(tm.status||''));
+    li('Países',paises);li('Idioma original',esc(tm.original_language||''));
+    li('Presupuesto',tm.budget?'$'+tm.budget.toLocaleString('es'):'');li('Recaudación',tm.revenue?'$'+tm.revenue.toLocaleString('es'):'');
+  }else{
+    li('Cadenas',names(tm.networks));li('Productoras',names(tm.production_companies));li('Estado',esc(tm.status||''));
+    li('Temporadas',tm.number_of_seasons);li('Episodios',tm.number_of_episodes);
+    li('Primera emisión',fmt(tm.first_air_date));li('Última emisión',fmt(tm.last_air_date));
+    li('Países',paises);li('Idioma original',esc(tm.original_language||''));
+  }
+  li('Web oficial',web);
+  const pane=(i,list,empty,n)=>{
+    if(!list.length)return `<div class="msg">${empty}</div>`;
+    const rest=list.slice(n);
+    return list.slice(0,n).join('')+(rest.length?`<div data-rest hidden>${rest.join('')}</div><button class="b vm" data-vm="${i}" data-t="Ver más (${rest.length})">Ver más (${rest.length})</button>`:'');
+  };
   return `<div class="box"><div class="seg"><button data-tb="0" class="on">Reparto</button><button data-tb="1">Equipo</button><button data-tb="2">Producción</button></div>
-  <div data-pane="0">${cast||E('Sin datos de reparto.')}</div><div data-pane="1" hidden>${eq.join('')||E('Sin datos del equipo.')}</div><div data-pane="2" hidden>${rows.join('')||E('Sin datos de producción.')}</div></div>`;
+  <div data-pane="0">${pane(0,cast,'Sin datos de reparto.',6)}</div><div data-pane="1" hidden>${pane(1,eq,'Sin datos del equipo.',5)}</div><div data-pane="2" hidden>${pane(2,rows,'Sin datos de producción.',4)}</div></div>`;
 }
 const wcount=x=>(x.seasons||[]).filter(q=>q.number>0).reduce((t,q)=>t+q.episodes.length,0);
 const isComplete=x=>{const a=x.show.aired_episodes;return a>0&&wcount(x)>=a};
@@ -990,6 +1004,10 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-sg]'))){LS2[tab].seg=x.dataset.sg;paintList(tab);return}
   if((x=T.closest('[data-cs]'))){CAL.seg=x.dataset.cs;calRun();return}
   if((x=T.closest('[data-ds]'))){document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===x));discRun(x.dataset.ds);return}
+  if((x=T.closest('[data-vm]'))){
+    const rest=x.parentElement.querySelector('[data-rest]');
+    rest.hidden=!rest.hidden;x.textContent=rest.hidden?x.dataset.t:'Ver menos';return;
+  }
   if((x=T.closest('[data-tb]'))){document.querySelectorAll('[data-tb]').forEach(b=>b.classList.toggle('on',b===x));document.querySelectorAll('[data-pane]').forEach(p=>{p.hidden=p.dataset.pane!==x.dataset.tb});return}
   if(T.closest('#bk')){tab==='cal'?paintEs():paintList(tab);return}
   if((x=T.closest('[data-ps]'))){PERS.seg=x.dataset.ps;paintPers();return}
