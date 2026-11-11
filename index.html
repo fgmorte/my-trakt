@@ -92,6 +92,11 @@ img[data-z]{cursor:zoom-in}
 [data-sm]{cursor:pointer}
 .lk{color:var(--ac);font-size:12px;font-weight:700;cursor:pointer}
 .vm{display:block;margin:10px auto 2px;padding:5px 18px}
+.hs{display:flex;gap:12px;overflow-x:auto;padding:6px 16px 14px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.hs::-webkit-scrollbar{display:none}
+.relc{flex:none;width:100px;scroll-snap-align:start;cursor:pointer}
+.relc .ph,.relc img{display:block;width:100px;height:150px;border-radius:8px;object-fit:cover;background:var(--card)}
+.rt2{font-weight:700;font-size:12.5px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px}
 .rt{display:inline-flex;align-items:center;gap:5px;font-weight:800;font-size:15px;color:var(--tx)}
 .rt svg{width:16px;height:16px;flex:none}
@@ -868,12 +873,18 @@ async function openDetail(n){
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
     <div class="it nb"><div class="lc big"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div></div><div><div class="trow"><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div>${stt?`<span class="chip">${esc(stt)}</span>`:''}</div><div class="s">${esc(meta)}</div>${prg?`<div><span class="chip">${esc(prg)}</span></div>`:''}<div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}<div class="rrow">${ratingHtml(d.rating,d.votes,d.comment_count)}</div></div></div>
     <div class="brow"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div>
-    <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}`;
+    <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}<div id="rel"></div>`;
     $('#back').onclick=()=>history.back();
     const shareUrl=`https://trakt.tv/${isM?'movies':'shows'}/${(d.ids&&d.ids.slug)||o.ids.trakt}`;
     const shareText=`${d.title}${d.year?' ('+d.year+')':''}${d.rating?' · ★ '+d.rating.toFixed(1):''}\n${ov.slice(0,220)}${ov.length>220?'…':''}`;
     window._d={isM,id:o.ids.trakt,n,share:{title:d.title,text:shareText,url:shareUrl}};
     loadPosters();
+    tr(`/${isM?'movies':'shows'}/${o.ids.trakt}/related?limit=20`).then(list=>{
+      const el=$('#rel');if(!el||my!==navId||!list||!list.length)return;
+      window._rel=list;
+      el.innerHTML=`<div class="sec">${isM?'Películas relacionadas':'Series relacionadas'}</div><div class="hs">${list.map((r,i)=>`<div class="relc" data-rel="${i}"><div class="ph" data-p="${kd}:${r.ids.tmdb||''}"></div><div class="rt2">${esc(r.title)}</div><div class="s">${r.year||''}</div></div>`).join('')}</div>`;
+      loadPosters();
+    }).catch(()=>{});
     platInfo(kd,o.ids.tmdb,d.network).then(list=>{
       const el=$('#pv');if(!el||my!==navId)return;
       el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" data-pv="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}" data-pv="${esc(x.n)}">${esc(x.n)}</span>`}).join('');
@@ -1004,6 +1015,7 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-sg]'))){LS2[tab].seg=x.dataset.sg;paintList(tab);return}
   if((x=T.closest('[data-cs]'))){CAL.seg=x.dataset.cs;calRun();return}
   if((x=T.closest('[data-ds]'))){document.querySelectorAll('[data-ds]').forEach(b=>b.classList.toggle('on',b===x));discRun(x.dataset.ds);return}
+  if((x=T.closest('[data-rel]'))){const r=(window._rel||[])[+x.dataset.rel];if(r)openDetail({kind:window._d&&window._d.isM?'movie':'show',o:r});return}
   if((x=T.closest('[data-vm]'))){
     const rest=x.parentElement.querySelector('[data-rest]');
     rest.hidden=!rest.hidden;x.textContent=rest.hidden?x.dataset.t:'Ver menos';return;
@@ -1215,7 +1227,7 @@ async function go(t){
     on=false;
     if(e.touches.length!==1||document.querySelector('.zoom,#intro'))return;
     const p=e.touches[0];
-    if(p.clientX<24||p.clientX>innerWidth-24||e.target.closest('input,textarea,select'))return;
+    if(p.clientX<24||p.clientX>innerWidth-24||e.target.closest('input,textarea,select,.hs'))return;
     sx=p.clientX;sy=p.clientY;dx=dy=0;dir=0;on=true;
   },{passive:true});
   addEventListener('touchmove',e=>{
