@@ -97,6 +97,18 @@ img[data-z]{cursor:zoom-in}
 .relc{flex:none;width:100px;scroll-snap-align:start;cursor:pointer}
 .relc .ph,.relc img{display:block;width:100px;height:150px;border-radius:8px;object-fit:cover;background:var(--card)}
 .rt2{font-weight:700;font-size:12.5px;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ep.ecard{background:var(--card);border-radius:14px;margin:8px 0;padding:8px;border-bottom:0}
+.ecard .it{display:flex;gap:10px;align-items:center;padding:0;border-bottom:0;cursor:pointer}
+.ecard .it .stl{flex:none;width:100px;height:56px;border-radius:9px;background:var(--ln);overflow:hidden}
+.stl img{width:100%;height:100%;object-fit:cover;display:block;border-radius:9px}
+.et .t{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dur{font-weight:700;font-size:12.5px;margin-top:2px}
+.eb{flex:none;display:flex;gap:5px;align-items:center}
+.shead{padding:4px 0 6px}
+.shr{display:flex;justify-content:space-between;align-items:baseline}
+.shr b{font-size:16px}
+.sstate{color:var(--mu);font-size:13px;font-weight:700}
+.shb{display:flex;justify-content:space-between;gap:8px;background:var(--card);border-radius:12px;padding:7px 12px;font-size:12.5px;font-weight:700;margin-top:6px}
 .rrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:8px}
 .rt{display:inline-flex;align-items:center;gap:5px;font-weight:800;font-size:15px;color:var(--tx)}
 .rt svg{width:16px;height:16px;flex:none}
@@ -847,7 +859,7 @@ async function openDetail(n){
       tr(base+'?extended=full'),
       tr(base+'/translations/es').catch(()=>[]),
       isM?null:tr(base+'/progress/watched?specials=false').catch(()=>null),
-      isM?null:tr(base+'/seasons?extended=episodes').catch(()=>[]),
+      isM?null:tr(base+'/seasons?extended=full,episodes').catch(()=>[]),
       tmdbInfo(kd,o.ids.tmdb),
       loadWL().catch(()=>{}),
       loadSeen().catch(()=>{})
@@ -861,15 +873,7 @@ async function openDetail(n){
     const fol=(isM?WL.m:WL.s).has(o.ids.trakt),sn=SEEN.m.has(o.ids.trakt),sd=SEEN.c.has(o.ids.trakt);
     const done={};
     if(pr)(pr.seasons||[]).forEach(s=>s.episodes.forEach(x=>{if(x.completed)done[s.number+'-'+x.number]=1}));
-    const seasons=(se||[]).filter(s=>s.number>0).map(s=>{
-      const eps=(s.episodes||[]).map(x=>{
-        const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date(),k=s.number+':'+x.number;
-        return `<div class="ep"><div class="it" style="padding:8px 0;border-bottom:0" data-sm="${k}"><div><span class="t">E${x.number} · ${esc(x.title||'')}</span><div class="s">${fut?'Se emite el '+fmt(x.first_aired):fmt(x.first_aired)}</div></div><span style="flex:none;white-space:nowrap">${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir">▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}</span></div><div class="epsum" hidden></div></div>`;
-      }).join('');
-      const aired=(s.episodes||[]).filter(x=>!(x.first_aired&&new Date(x.first_aired)>new Date()));
-      const c=(s.episodes||[]).filter(x=>done[s.number+'-'+x.number]).length,allw=aired.length>0&&aired.every(x=>done[s.number+'-'+x.number]);
-      return `<details><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${aired.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary>${eps}</details>`;
-    }).join('');
+    const seasons=seasonsHtml(se,done,d);
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
     <div class="it nb"><div class="lc big"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div></div><div><div class="trow"><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div>${stt?`<span class="chip">${esc(stt)}</span>`:''}</div><div class="s">${esc(meta)}</div>${prg?`<div><span class="chip">${esc(prg)}</span></div>`:''}<div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}<div class="rrow">${ratingHtml(d.rating,d.votes,d.comment_count)}</div></div></div>
     <div class="brow"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div>
@@ -931,24 +935,50 @@ async function openPerson(id){
   }catch(err){fail(err,$('#v'))}
 }
 
+const fmtDur=m=>m>=60?`${Math.floor(m/60)}h ${m%60}min`:`${m}min`;
+function seasonsHtml(se,done,d){
+  return (se||[]).filter(s=>s.number>0).map(s=>{
+    const eps=(s.episodes||[]).map(x=>{
+      const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date(),k=s.number+':'+x.number,rt=x.runtime||d.runtime||0;
+      const btn=`${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir">▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}`;
+      return `<div class="ep ecard"${fut?'':' data-air="1"'} data-rt="${rt}"><div class="it" data-sm="${k}"><div class="stl" data-st="${k}"></div><div class="et"><div class="t">${esc(x.title||'Episodio '+x.number)}</div><div class="s">T${s.number} · E${x.number}</div><div class="dur">${rt?fmtDur(rt):''}${fut?(rt?' · ':'')+'Se emite el '+fmt(x.first_aired):''}</div></div><span class="eb">${btn}</span></div><div class="epsum" hidden></div></div>`;
+    }).join('');
+    const air=(s.episodes||[]).filter(x=>!(x.first_aired&&new Date(x.first_aired)>new Date()));
+    const w=x=>done[s.number+'-'+x.number];
+    const c=(s.episodes||[]).filter(w).length,allw=air.length>0&&air.every(w);
+    const rem=air.filter(x=>!w(x)).length,mins=air.filter(x=>!w(x)).reduce((t,x)=>t+(x.runtime||d.runtime||0),0);
+    const state=!air.length?'Sin emitir':c===0?'No iniciado':allw?'Completada':'En curso';
+    return `<details data-sn="${s.number}"><summary><span class="sn">Temporada ${s.number} · <b class="sc">${c}</b>/${(s.episodes||[]).length}</span>${air.length?`<button class="b ${allw?'f':''}" data-sv="${s.number}">${allw?'✓ Visto':'Visto'}</button>`:''}</summary><div class="shead"><div class="shr"><b>Temporada ${s.number} progreso</b><span class="sstate">${state}</span></div><div class="shb"><span class="sw">${c} ${c===1?'episodio visto':'episodios vistos'}</span><span class="sr">${rem?`${rem} ${rem===1?'restante':'restantes'}${mins?' · '+fmtDur(mins):''}`:'Al día'}</span></div></div>${eps}</details>`;
+  }).join('');
+}
+function refreshSeasonHead(det){
+  if(!det)return;
+  const air=[...det.querySelectorAll('.ep[data-air]')],isW=e=>!!e.querySelector('[data-u]');
+  const c=air.filter(isW).length,rem=air.length-c,mins=air.filter(e=>!isW(e)).reduce((t,e)=>t+(+e.dataset.rt||0),0);
+  const sw=det.querySelector('.sw'),sr=det.querySelector('.sr'),ss=det.querySelector('.sstate'),sc=det.querySelector('.sc');
+  if(sw)sw.textContent=`${c} ${c===1?'episodio visto':'episodios vistos'}`;
+  if(sr)sr.textContent=rem?`${rem} ${rem===1?'restante':'restantes'}${mins?' · '+fmtDur(mins):''}`:'Al día';
+  if(ss)ss.textContent=!air.length?'Sin emitir':c===0?'No iniciado':rem===0?'Completada':'En curso';
+  if(sc)sc.textContent=c;
+}
 const SEI={};
+async function seasonMap(tm,sn){
+  if(!cfg.tmdb||!tm)return {};
+  const k=tm+':'+sn;
+  if(SEI[k])return SEI[k];
+  const g=async lang=>{const r=await fetch(`https://api.themoviedb.org/3/tv/${tm}/season/${sn}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${lang}`);return r.ok?r.json():null};
+  const map={};
+  try{
+    const d=await g('es-ES');
+    ((d&&d.episodes)||[]).forEach(e=>{map[e.episode_number]={o:e.overview||'',rt:e.runtime||0,v:e.vote_average||0,still:e.still_path?'https://image.tmdb.org/t/p/w300'+e.still_path:''}});
+    if(Object.values(map).some(x=>!x.o)){const d2=await g('en-US');((d2&&d2.episodes)||[]).forEach(e=>{const m=map[e.episode_number];if(m&&!m.o)m.o=e.overview||''})}
+  }catch(e){}
+  return SEI[k]=map;
+}
 async function epSummary(sh,sn,en){
-  const tm=sh.ids.tmdb,out={o:'',meta:''};
-  if(cfg.tmdb&&tm){
-    const k=tm+':'+sn;
-    if(!SEI[k]){
-      const g=async lang=>{const r=await fetch(`https://api.themoviedb.org/3/tv/${tm}/season/${sn}?api_key=${encodeURIComponent(cfg.tmdb)}&language=${lang}`);return r.ok?r.json():null};
-      const map={};
-      try{
-        const d=await g('es-ES');
-        ((d&&d.episodes)||[]).forEach(e=>{map[e.episode_number]={o:e.overview||'',rt:e.runtime||0,v:e.vote_average||0}});
-        if(Object.values(map).some(x=>!x.o)){const d2=await g('en-US');((d2&&d2.episodes)||[]).forEach(e=>{const m=map[e.episode_number];if(m&&!m.o)m.o=e.overview||''})}
-      }catch(e){}
-      SEI[k]=map;
-    }
-    const m=SEI[k][en];
-    if(m){out.o=m.o;out.meta=[m.rt?m.rt+' min':'',m.v?'★ '+m.v.toFixed(1):''].filter(Boolean).join(' · ')}
-  }
+  const out={o:'',meta:''};
+  const m=(await seasonMap(sh.ids.tmdb,sn))[en];
+  if(m){out.o=m.o;out.meta=[m.rt?m.rt+' min':'',m.v?'★ '+m.v.toFixed(1):''].filter(Boolean).join(' · ')}
   if(!out.o){
     try{
       const base=`/shows/${sh.ids.trakt}/seasons/${sn}/episodes/${en}`;
@@ -959,6 +989,14 @@ async function epSummary(sh,sn,en){
   }
   return out;
 }
+document.addEventListener('toggle',async e=>{
+  const det=e.target;
+  if(!det||det.tagName!=='DETAILS'||!det.open||!det.dataset.sn||det.dataset.ld)return;
+  det.dataset.ld='1';
+  const sh=window._d&&window._d.n&&window._d.n.o;if(!sh)return;
+  const map=await seasonMap(sh.ids.tmdb,+det.dataset.sn);
+  det.querySelectorAll('[data-st]').forEach(el=>{const m=map[el.dataset.st.split(':')[1]];if(m&&m.still)el.innerHTML=`<img src="${m.still}" alt="" loading="lazy">`});
+},true);
 
 /* ===== Ficha de episodio ===== */
 async function openEpisode(show,sn,en){
@@ -1037,6 +1075,7 @@ document.addEventListener('click',async e=>{
       const sc=det.querySelector('.sc');if(sc)sc.textContent=det.querySelectorAll('[data-u]').length;
       x.textContent=mark?'✓ Visto':'Visto';x.classList.toggle('f',mark);
       if(window._d)delete CD[window._d.n.o.ids.trakt];
+      refreshSeasonHead(det);
       toast(mark?'Temporada marcada como vista':'Temporada desmarcada');
     }catch(err){toast(err.message)}
     x.disabled=false;return;
@@ -1063,14 +1102,14 @@ document.addEventListener('click',async e=>{
     openDetail(n);return;
   }
   if((x=T.closest('[data-u]'))){
-    x.disabled=true;
-    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Visto deshecho')}
+    x.disabled=true;const det0=x.closest('details');
+    try{await tr('/sync/history/remove',{body:{episodes:[{ids:{trakt:+x.dataset.u}}]}});x.outerHTML=`<button class="b" data-e="${x.dataset.u}">Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];refreshSeasonHead(det0);toast('Visto deshecho')}
     catch(err){toast(err.message);x.disabled=false}
     return;
   }
   if((x=T.closest('[data-e]'))){
-    x.disabled=true;
-    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+x.dataset.e}}]}});x.outerHTML=`<button class="b f" data-u="${x.dataset.e}">✓ Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];toast('Marcado como visto')}
+    x.disabled=true;const det1=x.closest('details');
+    try{await tr('/sync/history',{body:{episodes:[{ids:{trakt:+x.dataset.e}}]}});x.outerHTML=`<button class="b f" data-u="${x.dataset.e}">✓ Visto</button>`;if(window._d)delete CD[window._d.n.o.ids.trakt];refreshSeasonHead(det1);toast('Marcado como visto')}
     catch(err){toast(err.message);x.disabled=false}
     return;
   }
