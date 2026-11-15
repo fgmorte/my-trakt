@@ -90,7 +90,6 @@ img[data-z]{cursor:zoom-in}
 .epsum{padding:0 0 10px}
 .epsum p{margin:4px 0 6px;font-size:13.5px}
 [data-sm]{cursor:pointer}
-.lk{color:var(--ac);font-size:12px;font-weight:700;cursor:pointer}
 .vm{display:block;margin:10px auto 2px;padding:5px 18px}
 .hs{display:flex;gap:12px;overflow-x:auto;padding:6px 16px 14px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .hs::-webkit-scrollbar{display:none}
@@ -998,30 +997,6 @@ document.addEventListener('toggle',async e=>{
   det.querySelectorAll('[data-st]').forEach(el=>{const m=map[el.dataset.st.split(':')[1]];if(m&&m.still)el.innerHTML=`<img src="${m.still}" alt="" loading="lazy">`});
 },true);
 
-/* ===== Ficha de episodio ===== */
-async function openEpisode(show,sn,en){
-  navId++;const my=navId,pad=x=>String(x).padStart(2,'0');
-  $('#h').textContent=show.title;
-  $('#v').innerHTML='<div class="msg">Cargando…</div>';
-  window.scrollTo(0,0);
-  if(!detailOpen){history.pushState({d:1},'');dpush++}
-  detailOpen=true;
-  try{
-    const base=`/shows/${show.ids.trakt}/seasons/${sn}/episodes/${en}`;
-    const [e,tx,w]=await Promise.all([tr(base+'?extended=full'),tr(base+'/translations/es').catch(()=>[]),tr(`/shows/${show.ids.trakt}/progress/watched?specials=false`).catch(()=>null)]);
-    if(my!==navId)return;
-    const seen=!!(w&&(w.seasons||[]).some(s=>s.number===sn&&s.episodes.some(x=>x.number===en&&x.completed)));
-    const ov=(tx[0]&&tx[0].overview)||e.overview||'Sin descripción.';
-    const fut=e.first_aired&&new Date(e.first_aired)>new Date();
-    const info=[e.first_aired?(fut?'Se emite el ':'Estreno: ')+fmt(e.first_aired):'',e.runtime?e.runtime+' min':'',e.rating?'★ '+e.rating.toFixed(1):''].filter(Boolean).join(' · ');
-    $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver a la serie</button></div>
-    <div class="box"><div class="sub">T${pad(sn)} | E${pad(en)}</div><div class="t" style="font-size:20px">${esc(e.title||'Episodio '+en)}</div><div class="s">${esc(info)}</div>
-    <div style="margin:12px 0">${fut?'':`<button class="b pb" data-play2="1">${PLAYLBL}</button>`}<button class="b ${seen?'f':''}" data-ev="1">${seen?'✓ Visto':'Visto'}</button></div><p>${esc(ov)}</p></div>`;
-    $('#back').onclick=()=>openDetail({kind:'show',o:show});
-    window._ep={show,sn,en,id:e.ids.trakt,seen};
-  }catch(err){fail(err,$('#v'))}
-}
-
 /* ===== Clics ===== */
 async function toggleSeenMovie(n,btn){
   const id=n.o.ids.trakt,on=SEEN.m.has(id);
@@ -1081,15 +1056,7 @@ document.addEventListener('click',async e=>{
     x.disabled=false;return;
   }
   if((x=T.closest('[data-pp]'))){const [id,sn,en]=x.dataset.pp.split(':'),sh=window._d.n.o;playTitle({paths:['/episodes/'+id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${sn}E${en}`});return}
-  if((x=T.closest('[data-ep]'))){const [sn,en]=x.dataset.ep.split(':').map(Number);openEpisode(window._d.n.o,sn,en);return}
   if(T.closest('[data-play]')){playTitle(tgtFor(window._d.n));return}
-  if(T.closest('[data-play2]')){const E=window._ep,sh=E.show;playTitle({paths:['/episodes/'+E.id,'/shows/'+sh.ids.trakt],tmdb:sh.ids.tmdb,kind:'tv',label:`${sh.title} · T${E.sn}E${E.en}`});return}
-  if((x=T.closest('[data-ev]'))){
-    const E=window._ep,on=E.seen;x.disabled=true;
-    try{await tr(on?'/sync/history/remove':'/sync/history',{body:{episodes:[{ids:{trakt:E.id}}]}});E.seen=!on;delete CD[E.show.ids.trakt];x.textContent=on?'Visto':'✓ Visto';x.classList.toggle('f',!on);toast(on?'Desmarcado':'Marcado como visto')}
-    catch(err){toast(err.message)}
-    x.disabled=false;return;
-  }
   if((x=T.closest('[data-tm]'))){
     const tt=x.dataset.tt||'movie';
     try{const r=await tr(`/search/tmdb/${x.dataset.tm}?type=${tt}`);if(r[0]&&r[0][tt])openDetail({kind:tt,o:r[0][tt]});else toast('Sin ficha en Trakt')}
@@ -1126,7 +1093,7 @@ document.addEventListener('click',async e=>{
       box.textContent='Cargando…';
       try{
         const [sn,en]=k.split(':').map(Number),m=await epSummary(window._d.n.o,sn,en);
-        box.innerHTML=`${m.meta?`<div class="s">${esc(m.meta)}</div>`:''}<p>${esc(m.o||'Sin sinopsis disponible.')}</p><a class="lk" data-ep="${k}">Abrir episodio →</a>`;
+        box.innerHTML=`${m.meta?`<div class="s">${esc(m.meta)}</div>`:''}<p>${esc(m.o||'Sin sinopsis disponible.')}</p>`;
         box.dataset.ok='1';
       }catch(err){box.textContent='No se pudo cargar la sinopsis.'}
     }
