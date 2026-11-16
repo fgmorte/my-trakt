@@ -1088,6 +1088,7 @@ document.addEventListener('click',async e=>{
   if((x=T.closest('[data-sm]'))){
     const box=x.parentElement.querySelector('.epsum'),k=x.dataset.sm;
     if(!box.hidden){box.hidden=true;return}
+    document.querySelectorAll('.epsum:not([hidden])').forEach(b=>{if(b!==box)b.hidden=true});
     box.hidden=false;
     if(!box.dataset.ok){
       box.textContent='Cargando…';
