@@ -1,4 +1,4 @@
-const CACHE = 'mi-trakt-v42';
+const CACHE = 'mi-trakt-v43';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

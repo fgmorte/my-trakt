@@ -31,7 +31,7 @@ nav button.on::after{content:"";width:22px;height:3px;border-radius:2px;backgrou
 .bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
 .b{display:inline-block;margin:6px 5px 0 0;padding:3px 10px;border-radius:99px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit;font-size:12px;font-weight:600;line-height:1.4}
 .b.f{background:var(--ac);border-color:var(--ac);color:var(--on)}
-.b:disabled{opacity:.5}
+.b:disabled{opacity:.4;cursor:not-allowed}
 .chk{flex:none;width:34px;height:34px;border-radius:50%;border:1.5px solid var(--ac);background:none;color:var(--ac);font-size:15px;font-weight:800;align-self:center}
 .chk:active,.chk:disabled{background:var(--ac);color:var(--on)}
 input{width:100%;padding:12px;margin:6px 0 12px;border-radius:10px;border:1px solid var(--ln);background:var(--card);color:var(--tx);font:inherit}
@@ -875,7 +875,7 @@ async function openDetail(n){
     const seasons=seasonsHtml(se,done,d);
     $('#v').innerHTML=`<div class="box"><button class="b" id="back">← Volver</button></div>
     <div class="it nb"><div class="lc big"><div class="ph" data-z="1" data-p="${kd}:${o.ids.tmdb||''}"></div></div><div><div class="trow"><div class="t">${esc(d.title)} <span class="s">${d.year||''}</span></div>${stt?`<span class="chip">${esc(stt)}</span>`:''}</div><div class="s">${esc(meta)}</div>${prg?`<div><span class="chip">${esc(prg)}</span></div>`:''}<div class="pv" id="pv"></div>${pr?`<div class="s">Llevas ${pr.completed} de ${pr.aired} episodios</div>${pr.aired?`<div class="bar"><i style="width:${Math.round(pr.completed/pr.aired*100)}%"></i></div>`:''}`:''}<div class="rrow">${ratingHtml(d.rating,d.votes,d.comment_count)}</div></div></div>
-    <div class="brow"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1">${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div>
+    <div class="brow"><button class="b ${fol?'f':''}" data-d="follow">${fol?'✓ Siguiendo':'+ Seguir'}</button>${isM?`<button class="b ${sn?'f':''}" data-d="seen">${sn?'✓ Visto':'Visto'}</button>`:`<button class="b ${sd?'f':''}" data-d="sseen">${sd?'✓ Visto':'Visto'}</button>`}<button class="b pb" data-play="1" disabled>${PLAYLBL}</button><button class="b" data-d="share">↗ Compartir</button></div>
     <div class="box"><p>${esc(ov)}</p></div>${seasons}${tabsHtml(tm,isM)}<div id="rel"></div>`;
     $('#back').onclick=()=>history.back();
     const shareUrl=`https://trakt.tv/${isM?'movies':'shows'}/${(d.ids&&d.ids.slug)||o.ids.trakt}`;
@@ -889,7 +889,10 @@ async function openDetail(n){
       loadPosters();
     }).catch(()=>{});
     platInfo(kd,o.ids.tmdb,d.network).then(list=>{
-      const el=$('#pv');if(!el||my!==navId)return;
+      if(my!==navId)return;
+      const rel=isM?d.released:d.first_aired,released=!rel||new Date(rel)<=new Date(),can=released&&list.some(x=>isMine(x.n));
+      $('#v').querySelectorAll('[data-play],[data-pp]').forEach(b=>{b.disabled=!can;b.title=can?'':(released?'Ninguna de tus plataformas activadas lo ofrece':'Todavía no está estrenada')});
+      const el=$('#pv');if(!el)return;
       el.innerHTML=list.map(x=>{const on=isMine(x.n)?' on':'';return x.l?`<img src="https://image.tmdb.org/t/p/w92${x.l}" alt="${esc(x.n)}" title="${esc(x.n)}" data-pv="${esc(x.n)}" class="pvi${on}">`:`<span class="pvt${on}" data-pv="${esc(x.n)}">${esc(x.n)}</span>`}).join('');
     }).catch(()=>{});
   }catch(err){fail(err,$('#v'))}
@@ -939,7 +942,7 @@ function seasonsHtml(se,done,d){
   return (se||[]).filter(s=>s.number>0).map(s=>{
     const eps=(s.episodes||[]).map(x=>{
       const ok=done[s.number+'-'+x.number],fut=x.first_aired&&new Date(x.first_aired)>new Date(),k=s.number+':'+x.number,rt=x.runtime||d.runtime||0;
-      const btn=`${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir">▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}`;
+      const btn=`${fut?'':`<button class="b" data-pp="${x.ids.trakt}:${k}" aria-label="Reproducir" disabled>▶</button>`}${ok?`<button class="b f" data-u="${x.ids.trakt}">✓ Visto</button>`:fut?'':`<button class="b" data-e="${x.ids.trakt}">Visto</button>`}`;
       return `<div class="ep ecard"${fut?'':' data-air="1"'} data-rt="${rt}"><div class="it" data-sm="${k}"><div class="stl" data-st="${k}"></div><div class="et"><div class="t">${esc(x.title||'Episodio '+x.number)}</div><div class="s">T${s.number} · E${x.number}</div><div class="dur">${rt?fmtDur(rt):''}${fut?(rt?' · ':'')+'Se emite el '+fmt(x.first_aired):''}</div></div><span class="eb">${btn}</span></div><div class="epsum" hidden></div></div>`;
     }).join('');
     const air=(s.episodes||[]).filter(x=>!(x.first_aired&&new Date(x.first_aired)>new Date()));
