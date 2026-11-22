@@ -687,16 +687,21 @@ async function calRun(){
 }
 
 /* ===== Descubrir ===== */
+const isNewForMe=n=>{
+  const id=n.o&&n.o.ids&&n.o.ids.trakt;
+  if(!id)return true;
+  return n.kind==='movie'?!(WL.m.has(id)||SEEN.m.has(id)):!(WL.s.has(id)||SEEN.s.has(id));
+};
 async function discRun(mode,q){
   const r=$('#r');r.innerHTML='<div class="msg">Cargando…</div>';
   try{
     let list;
     if(mode==='t'){
-      const [m,s]=await Promise.all([tr('/movies/trending?limit=40'),tr('/shows/trending?limit=40')]);
-      list=[];for(let i=0;i<40;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
-      list=list.map(norm).filter(Boolean);
+      const [m,s]=await Promise.all([tr('/movies/trending?limit=100'),tr('/shows/trending?limit=100')]);
+      list=[];for(let i=0;i<100;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
+      list=list.map(norm).filter(Boolean).filter(isNewForMe);
     }else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
-    startFeed(r,list,{size:12,prep:async a=>a,html:listCard,empty:'Sin resultados.'});
+    startFeed(r,list,{size:12,prep:async a=>a,html:listCard,empty:mode==='t'?'No hay novedades nuevas que no estés siguiendo.':'Sin resultados.'});
   }catch(err){fail(err,r)}
 }
 
@@ -766,7 +771,7 @@ const views={
   },
   async disc(){
     const my=navId;
-    await loadWL().catch(()=>{});
+    await Promise.all([loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
     if(my!==navId)return;
     $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim())discRun('s',e.target.value)});
