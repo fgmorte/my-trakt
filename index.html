@@ -340,12 +340,19 @@ async function trAll(path,lim=100){
   return out;
 }
 const CD=ls.get('cdone')||{};
+function countSeries(){return LS2.hist.shows.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c)).length}
+function updSeriesLabel(){const b=document.querySelector('[data-sg="show"]');if(b&&tab==='hist')b.textContent='Series ('+countSeries()+')'}
+async function bgVerify(){
+  const my=navId,S=LS2.hist,tried=new Set();
+  const need=()=>S.shows.filter(n=>n.chk&&!tried.has(n)&&!(CD[n.o.ids.trakt]&&Date.now()-CD[n.o.ids.trakt].t<6048e5));
+  for(let b=need().slice(0,5);b.length&&my===navId;b=need().slice(0,5)){b.forEach(n=>tried.add(n));await verifyDone(b)}
+}
 async function verifyDone(sl){
   const need=sl.filter(n=>n.chk&&!(CD[n.o.ids.trakt]&&Date.now()-CD[n.o.ids.trakt].t<6048e5));
   for(let i=0;i<need.length;i+=5)await Promise.all(need.slice(i,i+5).map(async n=>{
     try{const p=await progOf(n.o.ids.trakt);CD[n.o.ids.trakt]={c:p.aired>0&&p.completed>=p.aired?1:0,t:Date.now()}}catch(e){}
   }));
-  if(need.length)ls.set('cdone',CD);
+  if(need.length){ls.set('cdone',CD);updSeriesLabel()}
   return sl.filter(n=>!n.chk||(CD[n.o.ids.trakt]&&CD[n.o.ids.trakt].c)).map(n=>{if(n.chk)n.sdone=true;return n});
 }
 async function watchedMovies(){
@@ -604,11 +611,11 @@ function paintList(mode){
   const S=LS2[mode],q=S.q.trim().toLowerCase();
   const src=(S.seg==='show'?S.shows:S.movies).filter(n=>!q||n.o.title.toLowerCase().includes(q));
   document.querySelectorAll('[data-sg]').forEach(b=>b.classList.toggle('on',b.dataset.sg===S.seg));
-  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),html:(n,i)=>listCard(n,i,listBtns(mode,n)),after:observePl,done:()=>{if(mode==='hist'&&S.seg==='show'&&!q){const b=document.querySelector('[data-sg="show"]');if(b)b.textContent='Series ('+items.length+')'}},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
+  startFeed($('#hl'),src,{size:12,prep:(mode==='hist'&&S.seg==='show')?verifyDone:async a=>a,btns:n=>listBtns(mode,n),html:(n,i)=>listCard(n,i,listBtns(mode,n)),after:observePl,done:()=>{if(mode==='hist')updSeriesLabel()},empty:q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':'Aún no hay nada aquí.'});
 }
 function listShell(mode){
   const S=LS2[mode];
-  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">${mode==='hist'?'Series':'Series ('+S.shows.length+')'}</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tu lista o en Trakt" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
+  $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-sg="show">Series (${mode==='hist'?countSeries():S.shows.length})</button><button data-sg="movie">Películas (${S.movies.length})</button></div><input id="hq" type="search" placeholder="Buscar en tu lista o en Trakt" enterkeyhint="search" value="${esc(S.q)}"></div><div id="hl"></div>`;
   $('#hq').addEventListener('input',e=>{S.q=e.target.value;paintList(mode)});
   $('#hq').addEventListener('keydown',e=>{if(e.key==='Enter')searchList(mode,e.target.value)});
   paintList(mode);
@@ -687,6 +694,8 @@ async function calRun(){
 }
 
 /* ===== Descubrir ===== */
+const DISC={seg:'show'};
+function markDisc(){document.querySelectorAll('[data-dsg]').forEach(b=>b.classList.toggle('on',b.dataset.dsg===DISC.seg))}
 const isNewForMe=n=>{
   const id=n.o&&n.o.ids&&n.o.ids.trakt;
   if(!id)return true;
@@ -697,16 +706,15 @@ async function discRun(mode,q){
   try{
     let list;
     if(mode==='t'){
-      const [m,s]=await Promise.all([tr('/movies/trending?limit=100'),tr('/shows/trending?limit=100')]);
-      list=[];for(let i=0;i<100;i++){if(m[i])list.push(m[i]);if(s[i])list.push(s[i])}
-      list=list.map(norm).filter(Boolean).filter(isNewForMe);
-    }else list=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
+      const t=await tr(`/${DISC.seg==='movie'?'movies':'shows'}/trending?limit=100`);
+      list=t.map(norm).filter(Boolean).filter(isNewForMe);
+    }else list=(await tr(`/search/${DISC.seg==='movie'?'movie':'show'}?query=${encodeURIComponent(q)}&limit=30`)).map(norm).filter(Boolean);
     startFeed(r,list,{size:12,prep:async a=>a,html:listCard,empty:mode==='t'?'No hay novedades nuevas que no estés siguiendo.':'Sin resultados.'});
   }catch(err){fail(err,r)}
 }
 
 /* ===== Vistas ===== */
-const POR={seg:'c',tk:0};
+const POR={seg:'c',tk:0,q:'',src:{}};
 async function continueList(){
   try{
     const up=await trAll('/sync/progress/up_next',50);
@@ -727,21 +735,41 @@ async function startList(){
 }
 async function paintPor(){
   document.querySelectorAll('[data-por]').forEach(b=>b.classList.toggle('on',b.dataset.por===POR.seg));
-  const my=navId,tk=++POR.tk,box=$('#pl');
-  box.innerHTML='<div class="msg">Cargando…</div>';
+  const my=navId,tk=++POR.tk,box=$('#pl'),q=POR.q.trim().toLowerCase();
+  if(!POR.src[POR.seg])box.innerHTML='<div class="msg">Cargando…</div>';
   try{
+    if(!POR.src[POR.seg])POR.src[POR.seg]=await (POR.seg==='c'?continueList():startList());
+    if(my!==navId||tk!==POR.tk)return;
+    const all=POR.src[POR.seg],none=q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':null;
     if(POR.seg==='c'){
-      const st=await continueList();if(my!==navId||tk!==POR.tk)return;
-      startFeed(box,st,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:'Estás al día con todas tus series. 🎉'});
+      const st=all.filter(r=>!q||r.show.title.toLowerCase().includes(q));
+      startFeed(box,st,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:none||'Estás al día con todas tus series. 🎉'});
     }else{
-      const rows=await startList();if(my!==navId||tk!==POR.tk)return;
-      startFeed(box,rows,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),after:observePl,empty:'No tienes nada pendiente de empezar.'});
+      const rows=all.filter(n=>!q||n.o.title.toLowerCase().includes(q));
+      startFeed(box,rows,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),after:observePl,empty:none||'No tienes nada pendiente de empezar.'});
     }
+  }catch(err){fail(err,box)}
+}
+async function searchPor(q){
+  q=q.trim();if(!q)return;
+  const box=$('#pl');box.innerHTML='<div class="msg">Buscando…</div>';
+  try{
+    await Promise.all([loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
+    const d=(await tr(`/search/show,movie?query=${encodeURIComponent(q)}&limit=20`)).map(norm).filter(Boolean).map(n=>{
+      const id=n.o.ids.trakt,isM=n.kind==='movie';
+      n.extra=isM?(SEEN.m.has(id)?'✓ Ya la has visto':'Sin ver'):(SEEN.c.has(id)?'✓ Serie completa':SEEN.s.has(id)?'En curso: aparece en Continuar viendo':'Sin ver');
+      return n;
+    });
+    box.innerHTML='<div class="box"><button class="b" id="pbk">← Volver a Por Ver</button></div><div id="pr"></div>';
+    startFeed($('#pr'),d,{size:20,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),empty:'Sin resultados en Trakt.'});
   }catch(err){fail(err,box)}
 }
 const views={
   async prog(){
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-por="c">Continuar viendo</button><button data-por="e">Empezar a ver</button></div></div><div id="pl"></div>`;
+    POR.src={};
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-por="c">Continuar viendo</button><button data-por="e">Empezar a ver</button></div><input id="pq" type="search" placeholder="Buscar en Por Ver o en Trakt" enterkeyhint="search" value="${esc(POR.q)}"></div><div id="pl"></div>`;
+    $('#pq').addEventListener('input',e=>{POR.q=e.target.value;paintPor()});
+    $('#pq').addEventListener('keydown',e=>{if(e.key==='Enter')searchPor(e.target.value)});
     await paintPor();
   },
 
@@ -773,7 +801,8 @@ const views={
     const my=navId;
     await Promise.all([loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
     if(my!==navId)return;
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-dsg="show">Series</button><button data-dsg="movie">Películas</button></div><input id="q" type="search" placeholder="Buscar series o películas" enterkeyhint="search"></div><div id="r"></div>`;
+    markDisc();
     $('#q').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.value.trim())discRun('s',e.target.value)});
     await discRun('t');
   },
@@ -785,6 +814,7 @@ const views={
     S.shows=w.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'show',o:x.show,date:x.last_watched_at,chk:!isComplete(x),sub:'Serie completa',extra:(ENDED(x)?'Finalizada':'Al día · en emisión')+' · último: '+fmt(x.last_watched_at)}));
     S.movies=wm.slice().sort(byDesc('last_watched_at')).map(x=>({kind:'movie',o:x.movie,date:x.last_watched_at,extra:x.plays>1?`Vista ${x.plays} veces · última: ${fmt(x.last_watched_at)}`:'Vista el '+fmt(x.last_watched_at)}));
     listShell('hist');
+    bgVerify().catch(()=>{});
   }
 };
 
@@ -1065,6 +1095,8 @@ async function toggleFollow(n,btn){
 document.addEventListener('click',async e=>{
   const T=e.target;let x;
   if((x=T.closest('img[data-z]'))){const z=document.createElement('div');z.className='zoom';const im=document.createElement('img');im.src=x.src.replace(/\/w(185|342)\//,'/w780/');im.alt='';z.appendChild(im);z.onclick=()=>z.remove();document.body.appendChild(z);return}
+  if((x=T.closest('[data-dsg]'))){DISC.seg=x.dataset.dsg;markDisc();const v=(($('#q')&&$('#q').value)||'').trim();discRun(v?'s':'t',v);return}
+  if(T.closest('#pbk')){paintPor();return}
   if((x=T.closest('[data-por]'))){POR.seg=x.dataset.por;paintPor();return}
   if((x=T.closest('[data-sg]'))){LS2[tab].seg=x.dataset.sg;paintList(tab);return}
   if((x=T.closest('[data-cs]'))){CAL.seg=x.dataset.cs;calRun();return}
