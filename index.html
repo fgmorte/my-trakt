@@ -716,13 +716,28 @@ async function discRun(mode,q){
 /* ===== Vistas ===== */
 const POR={seg:'c',tk:0,q:'',src:{}};
 async function continueList(){
+  await loadWL().catch(()=>{});
+  const fol=sh=>WL.s.has(sh.ids.trakt);
+  try{   // lista «Progreso > En progreso» de Trakt, filtrada por la lista de seguimiento
+    const pr=await trAll('/sync/progress/watched?hide_completed=true',50);
+    const rows=(pr||[]).filter(x=>x&&x.show&&x.show.ids&&x.show.ids.trakt&&fol(x.show)).map(x=>({show:x.show,lw:(x.progress&&x.progress.last_watched_at)||x.last_watched_at||''}));
+    if(rows.length){rows.sort(byDesc('lw'));return rows.map(r=>({show:r.show}))}
+  }catch(e){}
   try{
     const up=await trAll('/sync/progress/up_next',50);
-    const rows=(up||[]).map(x=>x&&(x.show||(x.ids&&x.title?x:null))).filter(sh=>sh&&sh.ids&&sh.ids.trakt).map(sh=>({show:sh}));
+    const rows=(up||[]).map(x=>x&&(x.show||(x.ids&&x.title?x:null))).filter(sh=>sh&&sh.ids&&sh.ids.trakt).filter(fol).map(sh=>({show:sh}));
     if(rows.length)return rows;
   }catch(e){}
   const w=await watchedShows();
-  return w.filter(x=>!isComplete(x)).sort(byDesc('last_watched_at')).map(x=>({show:x.show}));
+  return w.filter(x=>!isComplete(x)&&fol(x.show)).sort(byDesc('last_watched_at')).map(x=>({show:x.show}));
+}
+async function unionList(){
+  await Promise.all([loadWL().catch(()=>{}),loadSeen().catch(()=>{})]);
+  const [a,w]=await Promise.all([trAll('/sync/watchlist/shows'),watchedShows()]);
+  const sw=new Set(w.map(x=>x.show.ids.trakt));
+  const started=w.map(x=>({kind:'show',o:x.show,ts:x.last_watched_at,date:x.last_watched_at,extra:(isComplete(x)?'Completa':'Empezada')+' · '+(WL.s.has(x.show.ids.trakt)?'la sigues':'no la sigues')+' · último: '+fmt(x.last_watched_at)}));
+  const fresh=a.filter(x=>!sw.has(x.show.ids.trakt)).map(x=>({kind:'show',o:x.show,ts:x.listed_at,date:x.listed_at,extra:'Sin empezar · la sigues · añadida el '+fmt(x.listed_at)}));
+  return [...started,...fresh].sort(byDesc('ts'));
 }
 async function startList(){
   const [a,b,w,wm]=await Promise.all([trAll('/sync/watchlist/shows'),trAll('/sync/watchlist/movies'),watchedShows(),watchedMovies()]);
@@ -734,19 +749,20 @@ async function startList(){
   ].sort(byDesc('ts'));
 }
 async function paintPor(){
-  document.querySelectorAll('[data-por]').forEach(b=>b.classList.toggle('on',b.dataset.por===POR.seg));
-  const my=navId,tk=++POR.tk,box=$('#pl'),q=POR.q.trim().toLowerCase();
-  if(!POR.src[POR.seg])box.innerHTML='<div class="msg">Cargando…</div>';
+  document.querySelectorAll('[data-por]').forEach(b=>b.classList.toggle('on',b.dataset.por===POR.seg&&!POR.q.trim()));
+  const my=navId,tk=++POR.tk,box=$('#pl'),q=POR.q.trim().toLowerCase(),key=q?'u':POR.seg;
+  if(!POR.src[key])box.innerHTML='<div class="msg">Cargando…</div>';
   try{
-    if(!POR.src[POR.seg])POR.src[POR.seg]=await (POR.seg==='c'?continueList():startList());
+    if(!POR.src[key])POR.src[key]=await (q?unionList():POR.seg==='c'?continueList():startList());
     if(my!==navId||tk!==POR.tk)return;
-    const all=POR.src[POR.seg],none=q?'Ninguna coincidencia. Pulsa Intro para buscarla en Trakt.':null;
-    if(POR.seg==='c'){
-      const st=all.filter(r=>!q||r.show.title.toLowerCase().includes(q));
-      startFeed(box,st,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:none||'Estás al día con todas tus series. 🎉'});
+    const all=POR.src[key];
+    if(q){
+      const rows=all.filter(n=>n.o.title.toLowerCase().includes(q));
+      startFeed(box,rows,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),after:observePl,empty:'Ninguna coincidencia entre tus series. Pulsa Intro para buscarla en Trakt.'});
+    }else if(POR.seg==='c'){
+      startFeed(box,all,{size:10,prep:progBatch,btns:btnsFor,after:fillAir,empty:'Estás al día con todas las series que sigues. 🎉'});
     }else{
-      const rows=all.filter(n=>!q||n.o.title.toLowerCase().includes(q));
-      startFeed(box,rows,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),after:observePl,empty:none||'No tienes nada pendiente de empezar.'});
+      startFeed(box,all,{size:12,prep:async a=>a,btns:btnsFor,html:(n,i)=>listCard(n,i,btnsFor(n)),after:observePl,empty:'No tienes nada pendiente de empezar.'});
     }
   }catch(err){fail(err,box)}
 }
@@ -767,7 +783,7 @@ async function searchPor(q){
 const views={
   async prog(){
     POR.src={};
-    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-por="c">Continuar viendo</button><button data-por="e">Empezar a ver</button></div><input id="pq" type="search" placeholder="Buscar en Por Ver o en Trakt" enterkeyhint="search" value="${esc(POR.q)}"></div><div id="pl"></div>`;
+    $('#v').innerHTML=`<div class="box" style="padding-bottom:0"><div class="seg"><button data-por="c">Continuar viendo</button><button data-por="e">Empezar a ver</button></div><input id="pq" type="search" placeholder="Buscar en tus series o en Trakt" enterkeyhint="search" value="${esc(POR.q)}"></div><div id="pl"></div>`;
     $('#pq').addEventListener('input',e=>{POR.q=e.target.value;paintPor()});
     $('#pq').addEventListener('keydown',e=>{if(e.key==='Enter')searchPor(e.target.value)});
     await paintPor();
